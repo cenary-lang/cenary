@@ -20,3 +20,4 @@ identifier = Tok.identifier lexer
 whitespace = Tok.whiteSpace lexer
 reserved   = Tok.reserved lexer
 reservedOp = Tok.reservedOp lexer
+natural    = Tok.natural lexer
