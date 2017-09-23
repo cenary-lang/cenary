@@ -4,14 +4,15 @@
 
 module EvmL.Parser where
 
-------------------------------------------------------
+--------------------------------------------------------------------------------
+import           Control.Arrow      ((>>>))
 import           Data.Functor
 import qualified Data.Text          as T
-import           Text.Parsec
-import           Text.Parsec.String (Parser)
 import qualified EvmL.Lexer         as Lexer
-------------------------------------------------------
-------------------------------------------------------
+import           Text.Parsec        as P
+import           Text.Parsec.String (Parser)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 data Expr =
     If Expr Expr
@@ -50,3 +51,6 @@ expr :: Parser Expr
 expr = if'
    <|> prims
    <?> "an expression"
+
+parse :: T.Text -> Either ParseError Expr
+parse = T.unpack >>> P.parse expr "<unknown>"
