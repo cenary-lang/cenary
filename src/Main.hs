@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
@@ -5,6 +6,7 @@ module Main where
 ------------------------------------------------------
 import           Data.Monoid  ((<>))
 import           Data.Text.IO as T
+import           Control.Monad.Writer
 ------------------------------------------------------
 import qualified EvmL.Codegen as C
 import qualified EvmL.Parser  as P
@@ -17,6 +19,13 @@ main = do
     Left err -> print err
     Right expr -> do
       print $ "Expr: " <> show expr
-      case C.codegen expr of
-        Left err       -> print $ "Codegen error: " <> err
-        Right byteCode -> print $ "Compile successful. Bytecode: " <> byteCode
+      let result = runWriterT (C.codegen expr)
+      case result of
+        Left err       -> print $ "Codegen error: " <> show err
+        Right (byteCode, logs) -> do
+          T.putStrLn "=== LOGS ==="
+          T.putStrLn logs
+          T.putStrLn "============"
+          T.putStrLn "=== RESULT ==="
+          T.putStrLn byteCode
+          T.putStrLn "============"

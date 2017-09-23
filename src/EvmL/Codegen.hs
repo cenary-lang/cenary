@@ -3,10 +3,44 @@
 module EvmL.Codegen where
 
 --------------------------------------------------------------------------------
-import qualified Data.Text   as T
+import qualified Data.Text            as T
+import qualified Codegen.EvmAPI       as API
+import qualified Codegen.EvmAPI.Op    as Op
+import           Codegen.Types
+import           Control.Monad.Except
+import           Control.Monad.State
+import           Control.Monad.Writer
+import           Control.Lens
 --------------------------------------------------------------------------------
 import           EvmL.Parser
+import           EvmL.Syntax
 --------------------------------------------------------------------------------
 
-codegen :: Expr -> Either T.Text T.Text
-codegen _ = Right "wow"
+data EvmCode =
+  EvmInt Int
+
+intExpr :: Expr -> Evm Integer
+intExpr (PrimInt int) = return int
+intExpr _             = throwError MeaninglessExpr
+
+codegenTop :: Expr -> Evm Integer
+codegenTop (PrimInt val) = do
+  addr <- API.alloc
+  API.store addr val
+  bc <- use byteCode
+  tell $ "Allocating for a prim int. Address: " <> T.pack (show addr) <> "\n"
+  tell $ "[B] " <> bc <> "\n"
+  return addr
+
+codegenTop (BinaryOp op expr1 expr2) = do
+  left <- codegenTop expr1
+  right <- codegenTop expr2
+  case op of
+    OpAdd -> tell "add\n" >> API.add left right
+    OpMul -> tell "mul\n" >> API.mul left right
+    OpSub -> tell "sub\n" >> API.sub left right
+    OpDiv -> tell "div\n" >> API.div left right
+
+codegen :: Expr -> WriterT T.Text (Either CodegenError) T.Text
+codegen expr =
+  _byteCode <$> execStateT (runEvm (codegenTop expr)) initCodegenState
