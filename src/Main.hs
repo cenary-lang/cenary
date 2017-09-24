@@ -18,11 +18,12 @@ import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
 import qualified Ivy.Parser          as P
 import qualified Ivy.Syntax          as S
 import           Options              (Options (..), Mode (..), parseOptions, debug)
+import           Utils.EvmAsm        (asm)
 ------------------------------------------------------
 
-codegenTop :: Mode -> [S.Expr] -> CodegenState -> IO T.Text
-codegenTop _ [] _ = return ""
-codegenTop mode (e:ex) state = do
+codegen :: Mode -> CodegenState -> [S.Expr] -> IO T.Text
+codegen _ _ [] = return ""
+codegen mode state (e:ex) = do
   when (debug mode) $ Prelude.putStrLn $ "[E] " <> show e
   let result = runWriterT (execStateT (runEvm (C.codegenTop e)) state)
   case result of
@@ -32,23 +33,35 @@ codegenTop mode (e:ex) state = do
         T.putStrLn $ "[B] " <> _byteCode newState
         T.putStrLn $ "[S] " <> T.pack (show (_symTable newState))
         T.putStrLn ""
-      (_byteCode newState <>) <$> codegenTop mode ex newState
+      (_byteCode newState <>) <$> codegen mode newState ex
+
+parse :: T.Text -> IO [S.Expr]
+parse code =
+  case P.parseTopLevel code of
+    Left err -> error $ show err
+    Right result -> return result
 
 main :: IO ()
 main = do
   (Options mode inputFile) <- parseOptions
+  print mode
+  print inputFile
+
   code <- T.readFile inputFile
-  case P.parseTopLevel code of
-    Left err    -> print err
-    Right exprs -> do
-      byteCode <- codegenTop mode exprs initCodegenState
-      case mode of
-        Run -> do
-          (_, Just hout, _, _) <- createProcess (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]){ std_out = CreatePipe }
-          T.putStrLn =<< hGetContents hout
-        Disasm -> do
-          T.writeFile "yis" byteCode 
-          (_, Just hout, _, _) <- createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
-          T.putStrLn =<< hGetContents hout
-          callProcess "rm" ["yis"]
+  case mode of
+    Run -> parse code >>= codegen mode initCodegenState >>= execByteCode
+    Asm -> do
+      let byteCode = asm (T.lines code)
+      print $ "Bytecode: " <> byteCode
+      execByteCode byteCode
+    Disasm -> do
+      parse code >>= codegen mode initCodegenState >>= T.writeFile "yis"
+      (_, Just hout, _, _) <- createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
+      T.putStrLn =<< hGetContents hout
+      callProcess "rm" ["yis"]
           
+  where
+    execByteCode :: T.Text -> IO ()
+    execByteCode byteCode = do
+      (_, Just hout, _, _) <- createProcess (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]){ std_out = CreatePipe }
+      T.putStrLn =<< hGetContents hout

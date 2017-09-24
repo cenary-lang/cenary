@@ -20,18 +20,6 @@ import           Ivy.Syntax
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text
 text input = T.pack <$> string (T.unpack input)
 
--- if' :: Parser Expr
--- if' = do
---   L.reserved "if"
---   many space
---   pred' <- expr
---   many space
---   L.reserved "then"
---   many space
---   body <- expr
---   return (If pred' body)
---   <?> "if expression"
-
 prims :: Parser Expr
 prims = (PrimInt <$> L.integer)
     <?> "primitive"

@@ -13,12 +13,14 @@ data Options = Options
   , _inputFile :: FilePath
   }
 
-data Mode = Debug | Run | Disasm
+data Mode = Debug | Run | Disasm | Asm
+  deriving Show
 
 instance IsString Mode where
   fromString "debug"  = Debug
   fromString "run"    = Run
   fromString "disasm" = Disasm
+  fromString "asm"    = Asm
 
 debug :: Mode -> Bool
 debug Debug = True

@@ -20,6 +20,10 @@ function debug {
   $EXECUTABLE -m debug -i stdlib.el
 }
 
+function asm {
+  $EXECUTABLE -m asm -i in.evm
+}
+
 case $1 in
 clear)
   clear
@@ -32,6 +36,9 @@ debug)
   ;;
 run)
   run
+  ;;
+asm)
+  asm
   ;;
 disasm)
   disasm
