@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
-module EvmL.Codegen.Types where
+module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
 import           Control.Arrow

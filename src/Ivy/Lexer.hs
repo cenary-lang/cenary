@@ -1,11 +1,11 @@
-module EvmL.Lexer where
+module Ivy.Lexer where
 
 --------------------------------------------------------------------------------
 import           Text.Parsec.Language (emptyDef)
 import           Text.Parsec.String   (Parser)
 import qualified Text.Parsec.Token    as Tok
 --------------------------------------------------------------------------------
-import           EvmL.Language        (style)
+import           Ivy.Language        (style)
 --------------------------------------------------------------------------------
 
 lexer :: Tok.TokenParser ()

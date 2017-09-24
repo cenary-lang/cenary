@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module EvmL.Codegen.EvmAPI where
+module Ivy.Codegen.EvmAPI where
 
 --------------------------------------------------------------------------------
 import           Control.Lens
@@ -9,8 +9,8 @@ import           Control.Monad.Writer
 import qualified Data.Text              as T
 import           Text.Printf
 --------------------------------------------------------------------------------
-import qualified EvmL.Codegen.EvmAPI.Op as Op
-import           EvmL.Codegen.Types
+import qualified Ivy.Codegen.EvmAPI.Op as Op
+import           Ivy.Codegen.Types
 --------------------------------------------------------------------------------
 
 push2 :: Integer -> Evm ()

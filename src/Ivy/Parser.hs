@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module EvmL.Parser where
+module Ivy.Parser where
 
 --------------------------------------------------------------------------------
 import           Control.Arrow         ((>>>))
@@ -13,8 +13,8 @@ import           Text.Parsec           as P
 import           Text.Parsec.Expr
 import           Text.Parsec.String    (Parser)
 --------------------------------------------------------------------------------
-import qualified EvmL.Lexer            as L
-import           EvmL.Syntax
+import qualified Ivy.Lexer            as L
+import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text

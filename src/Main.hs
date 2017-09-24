@@ -12,11 +12,11 @@ import           Data.Text.IO         as T
 import           System.Environment
 import           System.Process
 ------------------------------------------------------
-import qualified EvmL.Codegen         as C
-import           EvmL.Codegen.Types   (CodegenState (..), initCodegenState,
+import qualified Ivy.Codegen         as C
+import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
                                        runEvm)
-import qualified EvmL.Parser          as P
-import qualified EvmL.Syntax          as S
+import qualified Ivy.Parser          as P
+import qualified Ivy.Syntax          as S
 import           Options              (Options (..), Mode (..), parseOptions, debug)
 ------------------------------------------------------
 

@@ -1,4 +1,4 @@
-module EvmL.Syntax where
+module Ivy.Syntax where
 
 type Name = String
 

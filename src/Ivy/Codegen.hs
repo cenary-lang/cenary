@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module EvmL.Codegen where
+module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Lens
@@ -10,11 +10,11 @@ import           Control.Monad.Writer
 import qualified Data.Text              as T
 import qualified Data.Map as M
 --------------------------------------------------------------------------------
-import qualified EvmL.Codegen.EvmAPI    as API
-import qualified EvmL.Codegen.EvmAPI.Op as Op
-import           EvmL.Codegen.Types
-import           EvmL.Parser
-import           EvmL.Syntax
+import qualified Ivy.Codegen.EvmAPI    as API
+import qualified Ivy.Codegen.EvmAPI.Op as Op
+import           Ivy.Codegen.Types
+import           Ivy.Parser
+import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
 data EvmCode =

@@ -1,4 +1,4 @@
-module EvmL.Codegen.EvmAPI.Op where
+module Ivy.Codegen.EvmAPI.Op where
 
 add    = 0x01
 div    = 0x04
