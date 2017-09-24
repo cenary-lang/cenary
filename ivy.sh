@@ -6,24 +6,18 @@ function compile {
   echo "[.] Compilation complete."
 }
 
+EXECUTABLE=./dist/build/ivy/ivy
+
+function disasm {
+  $EXECUTABLE -m disasm -i stdlib.el
+}
+
 function run {
-  EXECUTABLE=./dist/build/ivy/ivy
-  if ! [[ -f $EXECUTABLE ]]; then
-    echo "[.] Need to compile before running glow. Compiling..."
-    compile
-  fi
-  echo "[.] Running glow..."
-  $EXECUTABLE $1
+  $EXECUTABLE -m run -i stdlib.el
 }
 
 function debug {
-  EXECUTABLE=./dist/build/ivy/ivy
-  if ! [[ -f $EXECUTABLE ]]; then
-    echo "[.] Need to compile before running glow. Compiling..."
-    compile
-  fi
-  echo "[.] Running debug..."
-  $EXECUTABLE $1
+  $EXECUTABLE -m debug -i stdlib.el
 }
 
 case $1 in
@@ -34,10 +28,13 @@ compile)
   compile
   ;;
 debug)
-  debug $2
+  debug
   ;;
 run)
-  run $2
+  run
+  ;;
+disasm)
+  disasm
   ;;
 *)
   compile
