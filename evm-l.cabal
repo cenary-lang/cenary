@@ -29,5 +29,7 @@ executable ivy
     lens,
     monad-logger,
     mtl,
+    optparse-applicative,
     parsec,
+    process,
     text
