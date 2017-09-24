@@ -1,3 +1,7 @@
-var a = 5;
-var b = 4;
-var c = a + b;
+var a;
+var b;
+var c;
+
+a = 5;
+b = 3;
+c = a + b;

@@ -11,7 +11,8 @@ data OpType =
 
 data Expr =
     PrimInt Integer
-  | Identifier String
-  | VarDecl String Expr
+  | Identifier Name
+  | VarDecl Name
+  | Assignment Name Expr
   | BinaryOp OpType Expr Expr
   deriving Show

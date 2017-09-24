@@ -18,7 +18,9 @@ import qualified Data.Text             as T
 --------------------------------------------------------------------------------
 
 data CodegenError =
-  MeaninglessExpr
+    MeaninglessExpr
+  | VariableNotDeclared String
+  | VariableNotDefined String
   deriving Show
 
 newtype Evm a = Evm { runEvm :: StateT CodegenState (WriterT T.Text (Either CodegenError)) a }
@@ -27,7 +29,7 @@ newtype Evm a = Evm { runEvm :: StateT CodegenState (WriterT T.Text (Either Code
 data CodegenState = CodegenState
   { _byteCode   :: !T.Text
   , _memPointer :: !Integer
-  , _symTable   :: !(M.Map String Integer) -- Symbols to addresses
+  , _symTable   :: !(M.Map String (Maybe Integer)) -- Symbols to addresses
   }
 
 makeLenses ''CodegenState

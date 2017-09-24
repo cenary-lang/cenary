@@ -26,16 +26,22 @@ intExpr _             = throwError MeaninglessExpr
 
 codegenTop :: Expr -> Evm Integer
 
-codegenTop (VarDecl name val) = do
+codegenTop (Assignment name val) = do
+  symTable' <- use symTable
   addr <- codegenTop val
-  symTable %= M.insert name addr
-  return addr
+  case M.lookup name symTable' of
+    Nothing ->       throwError $ VariableNotDefined name
+    Just _oldAddr -> addr <$ (symTable %= M.update (const (Just (Just addr))) name)
+
+codegenTop (VarDecl name) = do
+  0 <$ (symTable %= M.insert name Nothing)
 
 codegenTop (Identifier name) = do
   table <- use symTable
   case M.lookup name table of
-    Nothing -> error "Symbol cannot be found"
-    Just addr -> return addr
+    Nothing -> throwError (VariableNotDeclared name)
+    Just Nothing -> throwError (VariableNotDefined name)
+    Just (Just addr) -> return addr
 
 codegenTop (PrimInt val) = do
   addr <- API.alloc

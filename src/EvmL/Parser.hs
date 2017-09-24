@@ -52,21 +52,27 @@ binops = [ [ binary "*" OpMul AssocLeft
 expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
-var :: Parser Expr
-var = do
+varDecl :: Parser Expr
+varDecl = do
   L.reserved "var"
   L.whitespace
+  name <- L.identifier
+  return $ VarDecl name
+
+assignment :: Parser Expr
+assignment = do
   name <- L.identifier
   L.whitespace
   L.reserved "="
   L.whitespace
   val <- expr
-  return (VarDecl name val)
+  return (Assignment name val)
 
 factor :: Parser Expr
 factor = try (L.parens expr)
      <|> try prims
-     <|> try var
+     <|> try assignment
+     <|> try varDecl
      <|> (Identifier <$> L.identifier)
 
 topLevel :: Parser [Expr]
