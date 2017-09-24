@@ -18,17 +18,18 @@ import qualified EvmL.Syntax          as S
 codegenTop :: [S.Expr] -> CodegenState -> IO ()
 codegenTop [] _ = return ()
 codegenTop (e:ex) state = do
-  print $ "Expr: " <> show e
+  Prelude.putStrLn $ "[E] " <> show e
   let result = runWriterT (execStateT (runEvm (C.codegenTop e)) state)
   case result of
     Left err       -> print $ "Codegen error: " <> show err
     Right (newState, logs) -> do
-      T.putStrLn "=== LOGS ==="
-      T.putStrLn logs
-      T.putStrLn "============"
-      T.putStrLn "=== RESULT ==="
-      T.putStrLn (_byteCode newState)
-      T.putStrLn "============"
+      -- T.putStrLn "=== LOGS ==="
+      -- T.putStrLn logs
+      -- T.putStrLn "============"
+      -- T.putStrLn "=== RESULT ==="
+      T.putStrLn $ "[B] " <> _byteCode newState
+      T.putStrLn ""
+      -- T.putStrLn "============"
       codegenTop ex newState
 
 main :: IO ()

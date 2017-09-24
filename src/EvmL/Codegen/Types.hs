@@ -18,10 +18,12 @@ import qualified Data.Text             as T
 --------------------------------------------------------------------------------
 
 data CodegenError =
-    MeaninglessExpr
-  | VariableNotDeclared String
+    VariableNotDeclared String
   | VariableNotDefined String
-  deriving Show
+
+instance Show CodegenError where
+  show (VariableNotDeclared var) = "Variable " <> var <> " is not declared."
+  show (VariableNotDefined var) = "Variable " <> var <> " is not defined."
 
 newtype Evm a = Evm { runEvm :: StateT CodegenState (WriterT T.Text (Either CodegenError)) a }
   deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError, MonadWriter T.Text)

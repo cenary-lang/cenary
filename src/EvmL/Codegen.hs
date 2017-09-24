@@ -20,10 +20,6 @@ import           EvmL.Syntax
 data EvmCode =
   EvmInt Int
 
-intExpr :: Expr -> Evm Integer
-intExpr (PrimInt int) = return int
-intExpr _             = throwError MeaninglessExpr
-
 codegenTop :: Expr -> Evm Integer
 
 codegenTop (Assignment name val) = do
@@ -47,8 +43,6 @@ codegenTop (PrimInt val) = do
   addr <- API.alloc
   API.store addr val
   bc <- use byteCode
-  tell $ "Allocating for a prim int. Address: " <> T.pack (show addr) <> "\n"
-  tell $ "[B] " <> bc <> "\n"
   return addr
 
 codegenTop (BinaryOp op expr1 expr2) = do
