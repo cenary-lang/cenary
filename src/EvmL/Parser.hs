@@ -5,15 +5,15 @@
 module EvmL.Parser where
 
 --------------------------------------------------------------------------------
-import           Control.Arrow      ((>>>))
+import           Control.Arrow         ((>>>))
 import           Data.Functor
-import qualified Data.Text          as T
-import           Text.Parsec        as P
-import           Text.Parsec.Expr
-import           Text.Parsec.String (Parser)
 import           Data.Functor.Identity
+import qualified Data.Text             as T
+import           Text.Parsec           as P
+import           Text.Parsec.Expr
+import           Text.Parsec.String    (Parser)
 --------------------------------------------------------------------------------
-import qualified EvmL.Lexer         as L
+import qualified EvmL.Lexer            as L
 import           EvmL.Syntax
 --------------------------------------------------------------------------------
 

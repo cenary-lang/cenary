@@ -3,15 +3,18 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
-module Codegen.Types where
+module EvmL.Codegen.Types where
 
+--------------------------------------------------------------------------------
 import           Control.Arrow
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.Functor.Identity
-import qualified Data.Text as T
+import qualified Data.Text             as T
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 data CodegenError =
   MeaninglessExpr

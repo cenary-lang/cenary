@@ -1,4 +1,4 @@
-module Codegen.EvmAPI.Op where
+module EvmL.Codegen.EvmAPI.Op where
 
 add    = 01
 div    = 04

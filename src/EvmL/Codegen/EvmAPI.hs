@@ -1,14 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Codegen.EvmAPI where
+module EvmL.Codegen.EvmAPI where
 
-import qualified Codegen.EvmAPI.Op as Op
-import           Codegen.Types
-import qualified Data.Text         as T
-import           Control.Monad.State
+--------------------------------------------------------------------------------
 import           Control.Lens
+import           Control.Monad.State
 import           Control.Monad.Writer
+import qualified Data.Text              as T
 import           Text.Printf
+--------------------------------------------------------------------------------
+import qualified EvmL.Codegen.EvmAPI.Op as Op
+import           EvmL.Codegen.Types
+--------------------------------------------------------------------------------
 
 push :: Integer -> Evm ()
 push val = do

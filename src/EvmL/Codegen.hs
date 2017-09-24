@@ -3,15 +3,15 @@
 module EvmL.Codegen where
 
 --------------------------------------------------------------------------------
-import qualified Data.Text            as T
-import qualified Codegen.EvmAPI       as API
-import qualified Codegen.EvmAPI.Op    as Op
-import           Codegen.Types
+import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Writer
-import           Control.Lens
+import qualified Data.Text              as T
 --------------------------------------------------------------------------------
+import qualified EvmL.Codegen.EvmAPI    as API
+import qualified EvmL.Codegen.EvmAPI.Op as Op
+import           EvmL.Codegen.Types
 import           EvmL.Parser
 import           EvmL.Syntax
 --------------------------------------------------------------------------------

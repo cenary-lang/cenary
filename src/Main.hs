@@ -1,15 +1,15 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
 ------------------------------------------------------
-import           Data.Monoid  ((<>))
-import           Data.Text.IO as T
 import           Control.Monad.Writer
+import           Data.Monoid          ((<>))
+import           Data.Text.IO         as T
 ------------------------------------------------------
-import qualified EvmL.Codegen as C
-import qualified EvmL.Parser  as P
+import qualified EvmL.Codegen         as C
+import qualified EvmL.Parser          as P
 ------------------------------------------------------
 
 main :: IO ()
