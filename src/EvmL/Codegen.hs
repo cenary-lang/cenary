@@ -27,7 +27,20 @@ codegenTop (Assignment name val) = do
   addr <- codegenTop val
   case M.lookup name symTable' of
     Nothing ->       throwError $ VariableNotDefined name
-    Just _oldAddr -> addr <$ (symTable %= M.update (const (Just (Just addr))) name)
+    Just Nothing -> do
+      API.load addr
+      newAddr <- API.alloc
+      API.push1 newAddr
+      API.run1 Op.mstore
+      symTable %= M.update (const (Just (Just newAddr))) name
+      return newAddr
+    Just (Just oldAddr) -> do
+      API.load addr
+      API.push1 oldAddr
+      API.run1 Op.mstore
+      symTable %= M.update (const (Just (Just oldAddr))) name
+      return oldAddr
+      -- addr <$ (symTable %= M.update (const (Just (Just addr))) name)
 
 codegenTop (VarDecl name) = do
   0 <$ (symTable %= M.insert name Nothing)
@@ -49,10 +62,10 @@ codegenTop (BinaryOp op expr1 expr2) = do
   left <- codegenTop expr1
   right <- codegenTop expr2
   case op of
-    OpAdd -> tell "add\n" >> API.add left right
-    OpMul -> tell "mul\n" >> API.mul left right
-    OpSub -> tell "sub\n" >> API.sub left right
-    OpDiv -> tell "div\n" >> API.div left right
+    OpAdd -> API.add left right
+    OpMul -> API.mul left right
+    OpSub -> API.sub left right
+    OpDiv -> API.div left right
 
 codegen :: Expr -> WriterT T.Text (Either CodegenError) T.Text
 codegen expr =

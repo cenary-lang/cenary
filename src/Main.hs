@@ -7,6 +7,7 @@ module Main where
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.Monoid          ((<>))
+import           Data.Text            as T
 import           Data.Text.IO         as T
 ------------------------------------------------------
 import qualified EvmL.Codegen         as C
@@ -28,6 +29,7 @@ codegenTop (e:ex) state = do
       -- T.putStrLn "============"
       -- T.putStrLn "=== RESULT ==="
       T.putStrLn $ "[B] " <> _byteCode newState
+      T.putStrLn $ "[S] " <> T.pack (show (_symTable newState))
       T.putStrLn ""
       -- T.putStrLn "============"
       codegenTop ex newState
