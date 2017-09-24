@@ -1,11 +1,11 @@
 module EvmL.Codegen.EvmAPI.Op where
 
-add    = 01
-div    = 04
-mload  = 51
-mstore = 53
-mul    = 02
-pop    = 50
-push1  = 60
-push2  = 61
-sub    = 03
+add    = 0x01
+div    = 0x04
+mload  = 0x51
+mstore = 0x52
+mul    = 0x02
+pop    = 0x50
+push1  = 0x60
+push2  = 0x7f
+sub    = 0x03

@@ -12,6 +12,7 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.Functor.Identity
+import qualified Data.Map              as M
 import qualified Data.Text             as T
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -26,12 +27,14 @@ newtype Evm a = Evm { runEvm :: StateT CodegenState (WriterT T.Text (Either Code
 data CodegenState = CodegenState
   { _byteCode   :: !T.Text
   , _memPointer :: !Integer
+  , _symTable   :: !(M.Map String Integer) -- Symbols to addresses
   }
 
 makeLenses ''CodegenState
 
 initCodegenState :: CodegenState
 initCodegenState = CodegenState
-  { _byteCode = ""
-  , _memPointer = -1
+  { _byteCode   = ""
+  , _memPointer = -32
+  , _symTable   = M.empty
   }

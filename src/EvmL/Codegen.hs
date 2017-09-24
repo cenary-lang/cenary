@@ -8,6 +8,7 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import           Control.Monad.Writer
 import qualified Data.Text              as T
+import qualified Data.Map as M
 --------------------------------------------------------------------------------
 import qualified EvmL.Codegen.EvmAPI    as API
 import qualified EvmL.Codegen.EvmAPI.Op as Op
@@ -24,6 +25,18 @@ intExpr (PrimInt int) = return int
 intExpr _             = throwError MeaninglessExpr
 
 codegenTop :: Expr -> Evm Integer
+
+codegenTop (VarDecl name val) = do
+  addr <- codegenTop val
+  symTable %= M.insert name addr
+  return addr
+
+codegenTop (Identifier name) = do
+  table <- use symTable
+  case M.lookup name table of
+    Nothing -> error "Symbol cannot be found"
+    Just addr -> return addr
+
 codegenTop (PrimInt val) = do
   addr <- API.alloc
   API.store addr val

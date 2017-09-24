@@ -13,21 +13,30 @@ import qualified EvmL.Codegen.EvmAPI.Op as Op
 import           EvmL.Codegen.Types
 --------------------------------------------------------------------------------
 
-push :: Integer -> Evm ()
-push val = do
-  run Op.push1
-  run val
+push2 :: Integer -> Evm ()
+push2 val = do
+  run1 Op.push2
+  run2 val
+
+push1 :: Integer -> Evm ()
+push1 val = do
+  run1 Op.push1
+  run1 val
 
 pop :: Evm ()
-pop = run Op.pop
+pop = run1 Op.pop
 
 alloc :: Evm Integer
-alloc = memPointer <+= 1
+alloc = memPointer <+= 32
 
 -- | Add given opcode to byteCode string
-run :: Integer -> Evm ()
-run val = do
-  byteCode <>= T.pack (printf "%02d" val)
+run2 :: Integer -> Evm ()
+run2 val = do
+  byteCode <>= T.pack (printf "%064x" val)
+
+run1 :: Integer -> Evm ()
+run1 val = do
+  byteCode <>= T.pack (printf "%02x" val)
 
 mul, add, sub, div :: Integer -> Integer -> Evm Integer
 add = binOp Op.add
@@ -36,25 +45,25 @@ sub = binOp Op.sub
 div = binOp Op.div
 
 load :: Integer -> Evm ()
-load n = do
-  push n
-  run Op.mload
+load addr = do
+  push1 addr
+  run1 Op.mload
 
 store :: Integer -> Integer -> Evm ()
 store addr val = do
-  push val
-  push addr
-  run Op.mstore
+  push2 val
+  push1 addr
+  run1 Op.mstore
 
 binOp :: Integer -> (Integer -> Integer -> Evm Integer)
 binOp op left right = do
   load left
   load right
-  run op
+  run1 op
 
   -- Store result and get its address
   addr <- alloc
   tell $ "Allocating for a binary operation result. Address: " <> T.pack (show addr) <> "\n"
-  push addr
-  run Op.mstore
+  push1 addr
+  run1 Op.mstore
   return addr

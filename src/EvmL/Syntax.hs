@@ -10,7 +10,8 @@ data OpType =
   deriving Show
 
 data Expr =
-    If Expr Expr
-  | PrimInt Integer
+    PrimInt Integer
+  | Identifier String
+  | VarDecl String Expr
   | BinaryOp OpType Expr Expr
   deriving Show
