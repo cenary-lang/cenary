@@ -1,4 +1,4 @@
-module Ivy.Language where
+module Ivy.Lexer.Language where
 
 --------------------------------------------------------------------------------
 import           Text.Parsec.Language (emptyDef)

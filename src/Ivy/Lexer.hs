@@ -5,7 +5,7 @@ import           Text.Parsec.Language (emptyDef)
 import           Text.Parsec.String   (Parser)
 import qualified Text.Parsec.Token    as Tok
 --------------------------------------------------------------------------------
-import           Ivy.Language        (style)
+import           Ivy.Lexer.Language        (style)
 --------------------------------------------------------------------------------
 
 lexer :: Tok.TokenParser ()
