@@ -12,8 +12,8 @@ import qualified Data.Map                       as M
 import qualified Data.Text                      as T
 import           Data.Monoid                    ((<>))
 --------------------------------------------------------------------------------
-import           Ivy.Codegen.EvmAPI
-import qualified Ivy.Codegen.EvmAPI.Op          as Op
+import           Ivy.EvmAPI
+import qualified Ivy.EvmAPI.Op          as Op
 import           Ivy.Codegen.Types
 import           Ivy.Parser
 import           Ivy.Syntax

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Ivy.Codegen.EvmAPI where
+module Ivy.EvmAPI where
 
 --------------------------------------------------------------------------------
 import           Control.Arrow
@@ -11,7 +11,7 @@ import           Control.Monad.Writer
 import qualified Data.Text              as T
 import           Text.Printf
 --------------------------------------------------------------------------------
-import qualified Ivy.Codegen.EvmAPI.Op as Op
+import qualified Ivy.EvmAPI.Op as Op
 import           Ivy.Codegen.Types
 --------------------------------------------------------------------------------
 

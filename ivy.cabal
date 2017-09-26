@@ -38,9 +38,9 @@ executable ivy
     TypeCompose
   other-modules:
     Ivy.Codegen,
-    Ivy.Codegen.EvmAPI,
-    Ivy.Codegen.EvmAPI.Op,
     Ivy.Codegen.Types,
+    Ivy.EvmAPI,
+    Ivy.EvmAPI.Op,
     Ivy.Language,
     Ivy.Lexer,
     Ivy.Parser,
