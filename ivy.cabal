@@ -14,6 +14,7 @@ category:            Network
 build-type:          Simple
 extra-source-files:  ChangeLog.md, README.md
 cabal-version:       >=1.10
+
 source-repository head
   type:     git
   location: https://github.com/yigitozkavci/ivy
@@ -33,4 +34,16 @@ executable ivy
     parsec,
     parsec-numbers,
     process,
-    text
+    text,
+    TypeCompose
+  other-modules:
+    Ivy.Codegen,
+    Ivy.Codegen.EvmAPI,
+    Ivy.Codegen.EvmAPI.Op,
+    Ivy.Codegen.Types,
+    Ivy.Language,
+    Ivy.Lexer,
+    Ivy.Parser,
+    Ivy.Syntax,
+    Options,
+    Utils.EvmAsm

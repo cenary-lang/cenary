@@ -26,9 +26,13 @@ debug :: Mode -> Bool
 debug Debug = True
 debug _     = False
 
+parseMode :: Parser Mode
+parseMode =
+  fromString <$> strOption (long "mode" <> short 'm' <> help "Mode of the execution. `debug` or `run`")
+
 optParser :: Parser Options
 optParser = Options
-        <$> strOption ( long "mode" <> short 'm' <> help "Mode of the execution. `debug` or `run`" )
+        <$> parseMode
         <*> strOption (long "input" <> short 'i' <> help "Input file that contains ivy code" )
 
 parseOptions :: IO Options

@@ -2,11 +2,11 @@
 
 function compile {
   echo "[.] Compiling..."
-  cabal build
+  stack build
   echo "[.] Compilation complete."
 }
 
-EXECUTABLE=./dist/build/ivy/ivy
+EXECUTABLE=./.stack-work/install/x86_64-osx/lts-9.5/8.0.2/bin/ivy
 
 function disasm {
   $EXECUTABLE -m disasm -i stdlib.el
