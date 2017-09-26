@@ -31,7 +31,9 @@ data Instruction =
   | PUSH1
   | PUSH2
   | PUSH32
+  | DUP1
   | SWAP1
+  | SWAP2
   | RETURN
 
 toInstrCode :: Instruction -> Integer
@@ -50,11 +52,13 @@ toInstrCode JUMPDEST = 0x5b
 toInstrCode PUSH1 = 0x60
 toInstrCode PUSH2 = 0x61
 toInstrCode PUSH32 = 0x7f
+toInstrCode DUP1 = 0x80
 toInstrCode SWAP1 = 0x90
+toInstrCode SWAP2 = 0x91
 toInstrCode RETURN = 0xf3
 
 addBC :: Integer -> Evm ()
-addBC val = byteCode <>= T.pack (printf "%064x" val)
+addBC val = byteCode <>= T.pack (printf "%02x" val)
 
 op :: Instruction -> Evm ()
 op instr = byteCode <>= T.pack (printf "%02x" (toInstrCode instr))

@@ -62,7 +62,6 @@ main = do
       (_, Just hout, _, _) <- createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
       T.putStrLn =<< hGetContents hout
       callProcess "rm" ["yis"]
-          
   where
     execByteCode :: T.Text -> IO ()
     execByteCode byteCode = do

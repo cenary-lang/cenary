@@ -20,6 +20,22 @@ import           Ivy.Syntax
 codegenTop :: Expr -> Evm Integer
 
 codegenTop (Times until (Block bodyExpr)) = do
+  op2 PUSH1 until
+  op JUMPDEST
+
+  op PC
+  op2 PUSH1 0x01
+  op SWAP1
+  op SUB
+  op SWAP1
+  op2 PUSH1 0x01
+  op SWAP1
+  op SUB
+  mapM_ codegenTop bodyExpr
+  op DUP1
+  op SWAP2
+  op JUMPI
+
   return 0
 
 codegenTop (Assignment name val) = do
@@ -55,9 +71,9 @@ codegenTop (Identifier name) = do
 
 codegenTop (PrimInt val) = do
   addr <- alloc
-  op2 PUSH32 val
+  op2 PUSH1 val
   op2 PUSH1 addr
-  bc <- use byteCode
+  op MSTORE
   return addr
 
 codegenTop (BinaryOp op expr1 expr2) = do
