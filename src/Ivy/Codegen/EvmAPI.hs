@@ -69,7 +69,7 @@ op2 = curry ((op *** addBC) >>> uncurry (>>))
 alloc :: Evm Integer
 alloc = memPointer <+= 32
 
-binOp :: Instruction -> Integer -> Integer -> Evm Integer
+binOp :: Instruction -> Integer -> Integer -> Evm (Maybe Integer)
 binOp instr left right = do
   op2 PUSH1 left
   op MLOAD
@@ -79,7 +79,7 @@ binOp instr left right = do
   addr <- alloc
   op2 PUSH1 addr
   op MSTORE
-  return addr
+  return (Just addr)
 
 -- -- | Add given opcode to byteCode string
 -- run2 :: Integer -> Evm ()

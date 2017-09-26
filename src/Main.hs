@@ -5,7 +5,8 @@ module Main where
 
 ------------------------------------------------------
 import           Control.Monad.State
-import           Control.Monad.Writer
+import           Control.Monad.Logger
+import           Control.Monad.Except
 import           Data.Monoid          ((<>))
 import           Data.Text            as T
 import           Data.Text.IO         as T
@@ -24,15 +25,15 @@ import           Utils.EvmAsm        (asm)
 codegen :: Mode -> CodegenState -> [S.Expr] -> IO T.Text
 codegen _ _ [] = return ""
 codegen mode state (e:ex) = do
-  when (debug mode) $ Prelude.putStrLn $ "[E] " <> show e
-  let result = runWriterT (execStateT (runEvm (C.codegenTop e)) state)
+  when (debug mode) $ do
+    T.putStrLn $ "[E] " <> T.pack (show e)
+    T.putStrLn $ "[B] " <> _byteCode state
+    T.putStrLn $ "[S] " <> T.pack (show (_symTables state))
+
+  result <- runExceptT (runStdoutLoggingT (execStateT (runEvm (C.codegenTop 0 e)) state))
   case result of
     Left err       -> "" <$ print ("Codegen error: " <> show err)
-    Right (newState, logs) -> do
-      when (debug mode) $ do
-        T.putStrLn $ "[B] " <> _byteCode newState
-        T.putStrLn $ "[S] " <> T.pack (show (_symTable newState))
-        T.putStrLn ""
+    Right newState ->
       (_byteCode newState <>) <$> codegen mode newState ex
 
 parse :: T.Text -> IO [S.Expr]
@@ -53,6 +54,8 @@ main = do
       ast <- parse code
       codegen mode initCodegenState ast >>= execByteCode
       print ast
+    Debug ->
+      void $ parse code >>= codegen mode initCodegenState
     Asm -> do
       let byteCode = asm (T.lines code)
       print $ "Bytecode: " <> byteCode
