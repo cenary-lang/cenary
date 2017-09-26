@@ -1,8 +1,24 @@
-PUSH x10
+# Iteration count
+PUSH x03
+
+# Iteration header
 JUMPDEST
+PC
 PUSH x01
 SWAP1
 SUB
+SWAP1
+PUSH x01
+SWAP1
+SUB
+
+# Iteration body
+PUSH x01
+PUSH x01
+ADD
+POP
+
+# Iteration footer
 DUP1
-PUSH x02
+SWAP2
 JUMPI

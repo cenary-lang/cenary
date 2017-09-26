@@ -17,10 +17,26 @@ import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
-data EvmCode =
-  EvmInt Int
-
 codegenTop :: Expr -> Evm Integer
+
+codegenTop (Times until (Block bodyExpr)) = do
+  body <- mapM codegenTop bodyExpr
+  -- API.push1 until
+  -- API.jumpdest
+  -- API.push1 0x01
+  -- API.swap1
+  -- API.sub
+  -- API.dup1
+  -- API.
+  -- PUSH x10
+  -- JUMPDEST
+  -- PUSH x01
+  -- SWAP1
+  -- SUB
+  -- DUP1
+  -- PUSH x02
+  -- JUMPI
+  return 0
 
 codegenTop (Assignment name val) = do
   symTable' <- use symTable
@@ -40,9 +56,8 @@ codegenTop (Assignment name val) = do
       API.run1 Op.mstore
       symTable %= M.update (const (Just (Just oldAddr))) name
       return oldAddr
-      -- addr <$ (symTable %= M.update (const (Just (Just addr))) name)
 
-codegenTop (VarDecl name) = do
+codegenTop (VarDecl name) =
   0 <$ (symTable %= M.insert name Nothing)
 
 codegenTop (Identifier name) = do

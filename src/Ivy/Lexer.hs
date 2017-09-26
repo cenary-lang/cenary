@@ -21,3 +21,5 @@ whitespace = Tok.whiteSpace lexer
 reserved   = Tok.reserved lexer
 reservedOp = Tok.reservedOp lexer
 natural    = Tok.natural lexer
+operator   = Tok.operator lexer
+symbol     = Tok.symbol lexer

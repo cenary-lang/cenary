@@ -49,7 +49,10 @@ main = do
 
   code <- T.readFile inputFile
   case mode of
-    Run -> parse code >>= codegen mode initCodegenState >>= execByteCode
+    Run -> do
+      ast <- parse code
+      codegen mode initCodegenState ast >>= execByteCode
+      print ast
     Asm -> do
       let byteCode = asm (T.lines code)
       print $ "Bytecode: " <> byteCode

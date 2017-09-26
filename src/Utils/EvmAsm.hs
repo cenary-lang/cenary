@@ -5,11 +5,12 @@
 module Utils.EvmAsm where
 
 --------------------------------------------------------------------------------
+import           Data.Functor
 import           Control.Applicative hiding (many)
 import           Data.Monoid
 import qualified Data.Text            as T
 import           Data.String          (IsString)
-import           Text.Parsec
+import           Text.Parsec          as P
 import           Text.ParserCombinators.Parsec.Number
 import           Text.Parsec.String
 import qualified Text.Parsec.Token    as Tok
@@ -22,6 +23,7 @@ lexer :: Tok.TokenParser ()
 lexer = Tok.makeTokenParser emptyDef
 
 integer = Tok.integer lexer
+whiteSpace = Tok.whiteSpace lexer
 
 newtype ByteCode = ByteCode { unByteCode :: T.Text }
   deriving (Monoid)
@@ -48,17 +50,26 @@ toByteCode "MSTORE" = 0x52
 toByteCode "JUMP" = 0x56
 toByteCode "JUMPI" = 0x57
 toByteCode "SWAP1" = 0x90
+toByteCode "SWAP2" = 0x91
 toByteCode "DUP1" = 0x80
 toByteCode "JUMPDEST" = 0x5b
+toByteCode "PC" = 0x58
 toByteCode other = error $ "Instruction " <> other <> " is not recognised."
 
 toByteCode1 :: String -> Integer -> [Integer]
 toByteCode1 "PUSH" val = [0x60, val]
 
-instrParser :: Parser ByteCode
-instrParser = do
-  instr <- many alphaNum
+instruction :: Parser ByteCode
+instruction = do
+  instr <- many1 alphaNum
   arg <- optionMaybe (space >> hexadecimal)
-  case arg of
-    Just val -> return $ mconcat $ map (ByteCode . T.pack . printf "%02x") $ toByteCode1 instr val
-    Nothing -> return $ ByteCode $ T.pack $ printf "%02x" $ toByteCode instr
+  let result = case arg of
+        Just val -> mconcat $ map (ByteCode . T.pack . printf "%02x") $ toByteCode1 instr val
+        Nothing -> ByteCode $ T.pack $ printf "%02x" $ toByteCode instr
+  optionMaybe (spaces >> char '#' >> spaces)
+  return result
+
+instrParser :: Parser ByteCode
+instrParser = try instruction
+        P.<|> try (char '#' >> spaces $> ByteCode "")
+        P.<|> (whiteSpace $> ByteCode "")

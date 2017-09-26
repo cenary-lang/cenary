@@ -2,6 +2,9 @@ module Ivy.Syntax where
 
 type Name = String
 
+newtype Block = Block [Expr]
+  deriving Show
+
 data OpType =
     OpAdd
   | OpMul
@@ -15,4 +18,5 @@ data Expr =
   | VarDecl Name
   | Assignment Name Expr
   | BinaryOp OpType Expr Expr
+  | Times Integer Block
   deriving Show
