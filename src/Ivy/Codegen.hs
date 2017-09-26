@@ -6,7 +6,7 @@ module Ivy.Codegen where
 --------------------------------------------------------------------------------
 import           Control.Lens                   hiding (op)
 import           Control.Monad.Except
-import           Control.Monad.Logger.CallStack (logInfo)
+import           Control.Monad.Logger.CallStack (logInfo, logDebug, logWarn)
 import           Control.Monad.State
 import qualified Data.Map                       as M
 import qualified Data.Text                      as T
@@ -21,13 +21,24 @@ import           Ivy.Syntax
 
 useSymTable :: ScopeLevel -> Evm SymbolTable
 useSymTable level = do
+  touchLevel level
   tables <- use symTables
   case M.lookup level tables of
-    Just t  -> return t
-    Nothing -> M.empty <$ (symTables %= M.insert level M.empty)
+    Nothing ->
+      M.empty <$ logWarn "Something is not right. Check here."
+    Just table ->
+      return table
+
+touchLevel :: ScopeLevel -> Evm ()
+touchLevel level = do
+  tables <- use symTables
+  case M.lookup level tables of
+    Just t  -> return ()
+    Nothing -> symTables %= M.insert level M.empty
 
 updateSymTable :: ScopeLevel -> (SymbolTable -> SymbolTable) -> Evm ()
-updateSymTable level f =
+updateSymTable level f = do
+  touchLevel level
   symTables %= M.update (Just . f) level
 
 initScopeLevel :: Int
@@ -36,8 +47,12 @@ initScopeLevel = 0
 goInner :: ScopeLevel -> Evm ()
 goInner level = do
   myTable <- useSymTable level
-  logInfo "Updating sym table"
   updateSymTable (level + 1) (`M.union` myTable) -- union is left biased. Don't change its position!
+
+logSymTable :: Evm ()
+logSymTable = do
+  tables <- use symTables
+  logDebug $ T.pack (show tables)
 
 codegenTop :: ScopeLevel -> Expr -> Evm (Maybe Integer)
 codegenTop level (Times until (Block bodyExpr)) = do
@@ -60,7 +75,7 @@ codegenTop level (Times until (Block bodyExpr)) = do
   -- Code body
   goInner level
   forM_ bodyExpr $ codegenTop (level + 1)
-
+  logSymTable
   -- Jump to destination back if target value is nonzero
   op DUP1
   op SWAP2
