@@ -25,14 +25,9 @@ import           Utils.EvmAsm        (asm)
 codegen :: Mode -> CodegenState -> [S.Expr] -> IO T.Text
 codegen _ _ [] = return ""
 codegen mode state (e:ex) = do
-  when (debug mode) $ do
-    T.putStrLn $ "[E] " <> T.pack (show e)
-    T.putStrLn $ "[B] " <> _byteCode state
-    T.putStrLn $ "[S] " <> T.pack (show (_symTables state))
-
-  result <- runExceptT (runStdoutLoggingT (execStateT (runEvm (C.codegenTop 0 e)) state))
+  result <- runExceptT (runStdoutLoggingT (execStateT (runEvm (C.codegenTop' e)) state))
   case result of
-    Left err       -> "" <$ print ("Codegen error: " <> show err)
+    Left err       -> "" <$ (T.putStrLn "" >> print ("Codegen error: " <> show err))
     Right newState ->
       (_byteCode newState <>) <$> codegen mode newState ex
 

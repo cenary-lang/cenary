@@ -57,7 +57,7 @@ toInstrCode SWAP2 = 0x91
 toInstrCode RETURN = 0xf3
 
 addBC :: Integer -> Evm ()
-addBC val = byteCode <>= T.pack (printf "%02x" val)
+addBC val = byteCode <>= T.pack (printf "%064x" val)
 
 op :: Instruction -> Evm ()
 op instr = byteCode <>= T.pack (printf "%02x" (toInstrCode instr))
@@ -70,12 +70,12 @@ alloc = memPointer <+= 32
 
 binOp :: Instruction -> Integer -> Integer -> Evm (Maybe Integer)
 binOp instr left right = do
-  op2 PUSH1 left
+  op2 PUSH32 left
   op MLOAD
-  op2 PUSH1 right
+  op2 PUSH32 right
   op MLOAD
   op instr
   addr <- alloc
-  op2 PUSH1 addr
+  op2 PUSH32 addr
   op MSTORE
   return (Just addr)
