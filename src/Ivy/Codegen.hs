@@ -43,18 +43,19 @@ updateSymTable level f = do
 initScopeLevel :: Int
 initScopeLevel = 0
 
-goInner :: ScopeLevel -> Evm ()
-goInner level = do
-  myTable <- useSymTable level
-  updateSymTable (level + 1) (`M.union` myTable) -- union is left biased. Don't change its position!
-
 logSymTable :: Evm ()
 logSymTable = do
   tables <- use symTables
   logDebug $ T.pack (show tables)
 
+executeBlock :: ScopeLevel -> Block -> Evm ()
+executeBlock level (Block bodyExpr) = do
+  myTable <- useSymTable level
+  updateSymTable (level + 1) (`M.union` myTable) -- union is left biased. Don't change its position!
+  forM_ bodyExpr $ codegenTop (level + 1)
+
 codegenTop :: ScopeLevel -> Expr -> Evm (Maybe Integer)
-codegenTop level (Times until (Block bodyExpr)) = do
+codegenTop level (Times until block) = do
   -- Assign target value
   op2 PUSH1 until
   op JUMPDEST
@@ -72,8 +73,7 @@ codegenTop level (Times until (Block bodyExpr)) = do
   op SUB
 
   -- Code body
-  goInner level
-  forM_ bodyExpr $ codegenTop (level + 1)
+  executeBlock level block
   logSymTable
   -- Jump to destination back if target value is nonzero
   op DUP1
