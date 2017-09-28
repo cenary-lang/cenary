@@ -12,10 +12,14 @@ data OpType =
   | OpDiv
   deriving Show
 
+data Type =
+  IntT
+  deriving (Eq, Show)
+
 data Expr =
     PrimInt Integer
   | Identifier Name
-  | VarDecl Name
+  | VarDecl Type Name
   | Assignment Name Expr
   | BinaryOp OpType Expr Expr
   | Times Integer Block

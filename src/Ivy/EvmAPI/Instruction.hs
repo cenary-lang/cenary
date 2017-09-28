@@ -12,6 +12,7 @@ import qualified Data.Text              as T
 import           Text.Printf
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
+import qualified Ivy.Syntax             as S
 --------------------------------------------------------------------------------
 
 data Instruction =
@@ -68,8 +69,8 @@ op2 = curry ((op *** addBC) >>> uncurry (>>))
 alloc :: Evm Integer
 alloc = memPointer <+= 32
 
-binOp :: Instruction -> Integer -> Integer -> Evm (Maybe Integer)
-binOp instr left right = do
+binOp :: S.Type -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
+binOp t instr left right = do
   op2 PUSH32 left
   op MLOAD
   op2 PUSH32 right
@@ -78,4 +79,4 @@ binOp instr left right = do
   addr <- alloc
   op2 PUSH32 addr
   op MSTORE
-  return (Just addr)
+  return (Just (Operand t addr))

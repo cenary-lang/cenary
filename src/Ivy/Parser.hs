@@ -41,12 +41,16 @@ binops = [ [ binary "*" OpMul AssocLeft
 expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
+typeDecl :: Parser Type
+typeDecl =
+  reserved "int" $> IntT
+
 varDecl :: Parser Expr
 varDecl = do
-  reserved "var"
+  type' <- typeDecl
   whitespace
   name <- identifier
-  return $ VarDecl name
+  return $ VarDecl type' name
   <?> "variable decleration"
 
 block :: Parser Block

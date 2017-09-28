@@ -55,23 +55,23 @@ executeBlock (Block bodyExpr) = do
   globalScope .= g -- Reset global scope
   localScope .= l -- Reset local scope
 
-assign :: Name -> Integer -> Evm ()
-assign name addr = do
+assign :: Type -> Name -> Integer -> Evm ()
+assign ty name addr = do
   g <- use globalScope
   l <- use localScope
   case M.lookup name g of
     Just _addr' ->
-      globalScope %= M.update (const (Just (Just addr))) name
+      globalScope %= M.update (const (Just (ty, Just addr))) name
     Nothing ->
       case M.lookup name l of
-        Just _addr' -> localScope %= M.update (const (Just (Just addr))) name
+        Just _addr' -> localScope %= M.update (const (Just (ty, Just addr))) name
         Nothing -> throwError (VariableNotDeclared name)
 
-decl :: Name -> Evm ()
-decl name = do
+decl :: Type -> Name -> Evm ()
+decl ty name = do
   l <- use localScope
   case M.lookup name l of
-    Nothing -> localScope %= M.insert name Nothing
+    Nothing -> localScope %= M.insert name (ty, Nothing)
     Just _ -> throwError (VariableAlreadyDeclared name)
 
 lookup :: String -> Evm VariableStatus
@@ -80,18 +80,25 @@ lookup name = do
   l <- M.lookup name <$> use localScope
   decide g l
   where
-    decide :: Maybe (Maybe Integer) -> Maybe (Maybe Integer) -> Evm VariableStatus
+    -- FIXME
+    decide :: Maybe (Type, Maybe Integer) -> Maybe (Type, Maybe Integer) -> Evm VariableStatus
     decide Nothing           Nothing           = return NotDeclared
-    decide Nothing           (Just Nothing)    = return $ Decl Local
-    decide Nothing           (Just (Just val)) = return $ Def Local val
-    decide (Just Nothing)    Nothing           = return $ Decl Global
-    decide (Just Nothing)    (Just Nothing)    = throwError (VariableAlreadyDeclared name)
-    decide (Just Nothing)    (Just (Just val)) = return $ Def Local val
-    decide (Just (Just val)) Nothing           = return $ Def Global val
-    decide (Just (Just val)) (Just Nothing)    = throwError (VariableAlreadyDeclared name)
-    decide (Just (Just _))   (Just (Just val)) = return $ Def Local val -- Local value overrides
+    decide Nothing           (Just (ty, Nothing))    = return $ Decl ty Local
+    decide Nothing           (Just (ty, Just val)) = return $ Def ty Local val
+    decide (Just (ty, Nothing))    Nothing           = return $ Decl ty Global
+    decide (Just (_ty1, Nothing))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
+    decide (Just (ty1, Nothing))    (Just (ty2, Just val)) =
+      if ty1 == ty2
+         then return $ Def ty1 Local val
+         else throwError (ScopedTypeViolation name ty1 ty2)
+    decide (Just (ty, Just val)) Nothing           = return $ Def ty Global val
+    decide (Just (_ty1, Just val)) (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
+    decide (Just (ty1, Just _))   (Just (ty2, Just val)) =
+      if ty1 == ty2
+         then return $ Def ty1 Local val -- Local value overrides
+         else throwError (ScopedTypeViolation name ty1 ty2)
 
-codegenTop :: Expr -> Evm (Maybe Integer)
+codegenTop :: Expr -> Evm (Maybe Operand)
 codegenTop (Times until block) = do
   -- Assign target value
   op2 PUSH32 until
@@ -118,79 +125,65 @@ codegenTop (Times until block) = do
 
   return Nothing
 
--- noglobal ->
---   nolocal ->
---     NotDeclared
---   local without value ->
---     LocalDecl
---   local with value ->
---     LocalDef value
--- global without value ->
---   nolocal ->
---     GlobalDecl
---   local without value ->
---     Error
---   local with value ->
---     LocalDef value
--- global with value ->
---   nolocal ->
---     GlobalDef value
---   local without value ->
---     Error
---   local with value ->
---     LocalDef value
-
 codegenTop (Assignment name val) = do
-  addr <- codegenTopOperand val
+  Operand tyR addr <- codegenTopOperand val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
-    Decl _ -> do
+    Decl tyL _ -> do
+      unless (tyL == tyR) $ throwError $ TypeMismatch name tyL tyR
       op2 PUSH32 addr
       op MLOAD
       newAddr <- alloc
       op2 PUSH32 newAddr
       op MSTORE
-      assign name newAddr
+      assign tyL name newAddr
       -- updateSymTable level $ M.update (const (Just (Just newAddr))) name
       return Nothing
-    Def _ oldAddr -> do
+    Def tyL _ oldAddr -> do
+      unless (tyL == tyR) $ throwError $ TypeMismatch name tyL tyR
       op2 PUSH32 addr
       op MLOAD
       op2 PUSH32 oldAddr
       op MSTORE
-      assign name oldAddr
+      assign tyL name oldAddr
       -- updateSymTable level $ M.update (const (Just (Just oldAddr))) name
       return Nothing
 
-codegenTop (VarDecl name) =
-  Nothing <$ decl name
+codegenTop (VarDecl ty name) =
+  Nothing <$ decl ty name
 
 codegenTop (Identifier name) = do
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name)
-    Decl _ -> throwError (VariableNotDefined name)
-    Def _ addr -> return (Just addr)
+    Decl _ _ -> throwError (VariableNotDefined name)
+    Def ty _ addr -> return (Just (Operand ty addr))
 
 codegenTop (PrimInt val) = do
   addr <- alloc
   op2 PUSH32 val
   op2 PUSH32 addr
   op MSTORE
-  return (Just addr)
+  return (Just (Operand IntT addr))
 
 codegenTop (BinaryOp op expr1 expr2) = do
-  left <- codegenTopOperand expr1
-  right <- codegenTopOperand expr2
+  Operand _ left <- codegenTopOperand expr1
+  Operand _ right <- codegenTopOperand expr2
   case op of
-    OpAdd -> binOp ADD left right
-    OpMul -> binOp MUL left right
-    OpSub -> binOp SUB left right
-    OpDiv -> binOp DIV left right
+    OpAdd -> binOp IntT ADD left right
+    OpMul -> binOp IntT MUL left right
+    OpSub -> binOp IntT SUB left right
+    OpDiv -> binOp IntT DIV left right
+
+-- checkTyEq :: Type -> Type -> Evm Type
+-- checkTyEq ty1 ty2 =
+--   case (ty1, ty2) of
+--     (IntT, IntT) -> return IntT
+--     _            -> throwError $ TypeMismatch $ "Expected " <> T.pack (show ty1) <> " and " <> T.pack (show ty2) <> "to have equal types"
 
 getEnv :: Evm SymbolTable
 getEnv = liftA2 (<>) (use localScope) (use globalScope)
 
-codegenTopOperand :: Expr -> Evm Integer
+codegenTopOperand :: Expr -> Evm Operand
 codegenTopOperand expr =
   codegenTop' expr >>= \case
     Just val -> return val
@@ -199,7 +192,7 @@ codegenTopOperand expr =
 log :: Show a => T.Text -> a -> Evm ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 
-codegenTop' :: Expr -> Evm (Maybe Integer)
+codegenTop' :: Expr -> Evm (Maybe Operand)
 codegenTop' expr = do
   log "Expr" expr
   use byteCode >>= log "ByteCode"
