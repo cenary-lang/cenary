@@ -26,6 +26,7 @@ data CodegenError =
   | TypeMismatch String S.Type S.Type
   | ScopedTypeViolation String S.Type S.Type
   | InternalError String
+  | WrongOperandTypes S.Type S.Type
 
 type Addr = Integer
 data Operand = Operand S.Type Addr
@@ -33,6 +34,7 @@ data Operand = Operand S.Type Addr
 instance Show CodegenError where
   show (VariableNotDeclared var) = "Variable " <> var <> " is not declared."
   show (VariableNotDefined var)  = "Variable " <> var <> " is not defined."
+  show (VariableAlreadyDeclared var) = "Variable " <> var <> " is already declared."
   show (TypeMismatch name expected actual) = "Type mismatch for variable "
                                           <> name
                                           <> ". Expected: "

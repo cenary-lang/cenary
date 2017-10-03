@@ -21,9 +21,9 @@ ops =
   , "-"
   , "/"
   , ";"
-  , "."
+  , "'"
   ]
 
 names :: [String]
 names =
-  ["if","if", "then", "else", "times", "endtimes", "do"]
+  ["if", "then", "else", "times", "endtimes", "do", "int", "char"]

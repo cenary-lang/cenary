@@ -21,8 +21,14 @@ import           Ivy.Syntax
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text
 text input = T.pack <$> string (T.unpack input)
 
+primChar :: Parser Expr
+primChar = do
+  c <- charLiteral
+  return (PrimChar c)
+
 prims :: Parser Expr
 prims = (PrimInt <$> integer)
+    <|> primChar
     <?> "primitive"
 
 term :: Parser Integer
@@ -42,8 +48,9 @@ expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
 typeDecl :: Parser Type
-typeDecl =
-  reserved "int" $> IntT
+typeDecl = reserved "int" $> IntT
+       <|> reserved "char" $> CharT
+       <?> "type declaration"
 
 varDecl :: Parser Expr
 varDecl = do

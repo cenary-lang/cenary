@@ -5,7 +5,7 @@ type Name = String
 newtype Block = Block [Expr]
   deriving Show
 
-data OpType =
+data Op =
     OpAdd
   | OpMul
   | OpSub
@@ -13,14 +13,16 @@ data OpType =
   deriving Show
 
 data Type =
-  IntT
+    IntT
+  | CharT
   deriving (Eq, Show)
 
 data Expr =
     PrimInt Integer
+  | PrimChar Char
   | Identifier Name
   | VarDecl Type Name
   | Assignment Name Expr
-  | BinaryOp OpType Expr Expr
+  | BinaryOp Op Expr Expr
   | Times Integer Block
   deriving Show

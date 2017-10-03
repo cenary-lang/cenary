@@ -9,6 +9,7 @@ import           Control.Applicative
 import           Control.Monad.Except
 import           Control.Monad.Logger.CallStack (logInfo, logDebug, logWarn)
 import           Control.Monad.State
+import           Data.Char                      (ord)
 import qualified Data.Map                       as M
 import qualified Data.Text                      as T
 import           Data.Monoid                    ((<>))
@@ -19,28 +20,6 @@ import           Ivy.Codegen.Types
 import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
-
--- useSymTable :: ScopeLevel -> Evm SymbolTable
--- useSymTable level = do
---   touchLevel level
---   tables <- use symTables
---   case M.lookup level tables of
---     Nothing ->
---       M.empty <$ logWarn "Something is not right. Check here."
---     Just table ->
---       return table
-
--- touchLevel :: ScopeLevel -> Evm ()
--- touchLevel level = do
---   tables <- use symTables
---   case M.lookup level tables of
---     Just t  -> return ()
---     Nothing -> symTables %= M.insert level M.empty
-
--- updateSymTable :: ScopeLevel -> (SymbolTable -> SymbolTable) -> Evm ()
--- updateSymTable level f = do
---   touchLevel level
---   symTables %= M.update (Just . f) level
 
 initScopeLevel :: Int
 initScopeLevel = 0
@@ -130,7 +109,7 @@ codegenTop (Assignment name val) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl tyL _ -> do
-      unless (tyL == tyR) $ throwError $ TypeMismatch name tyL tyR
+      unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
       op2 PUSH32 addr
       op MLOAD
       newAddr <- alloc
@@ -140,7 +119,7 @@ codegenTop (Assignment name val) = do
       -- updateSymTable level $ M.update (const (Just (Just newAddr))) name
       return Nothing
     Def tyL _ oldAddr -> do
-      unless (tyL == tyR) $ throwError $ TypeMismatch name tyL tyR
+      unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
       op2 PUSH32 addr
       op MLOAD
       op2 PUSH32 oldAddr
@@ -165,14 +144,24 @@ codegenTop (PrimInt val) = do
   op MSTORE
   return (Just (Operand IntT addr))
 
+codegenTop (PrimChar val) = do
+  addr <- alloc
+  op2 PUSH32 (fromIntegral (ord val))
+  op2 PUSH32 addr
+  op MSTORE
+  return (Just (Operand CharT addr))
+
 codegenTop (BinaryOp op expr1 expr2) = do
-  Operand _ left <- codegenTopOperand expr1
-  Operand _ right <- codegenTopOperand expr2
-  case op of
-    OpAdd -> binOp IntT ADD left right
-    OpMul -> binOp IntT MUL left right
-    OpSub -> binOp IntT SUB left right
-    OpDiv -> binOp IntT DIV left right
+  Operand ty1 left <- codegenTopOperand expr1
+  Operand ty2 right <- codegenTopOperand expr2
+  case (ty1, ty2) of
+    (IntT, IntT) ->
+      case op of
+        OpAdd -> binOp IntT ADD left right
+        OpMul -> binOp IntT MUL left right
+        OpSub -> binOp IntT SUB left right
+        OpDiv -> binOp IntT DIV left right
+    _ -> throwError $ WrongOperandTypes ty1 ty2
 
 -- checkTyEq :: Type -> Type -> Evm Type
 -- checkTyEq ty1 ty2 =
