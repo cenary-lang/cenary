@@ -1,24 +1,19 @@
-# Iteration count
-PUSH x03
-
-# Iteration header
-JUMPDEST
-PC
-PUSH x01
-SWAP1
-SUB
-SWAP1
-PUSH x01
-SWAP1
-SUB
-
-# Iteration body
-PUSH x01
-PUSH x01
-ADD
-POP
-
-# Iteration footer
-DUP1
-SWAP2
-JUMPI
+PUSH x62
+PUSH x05
+MSTORE8
+PUSH x63 # Logging data to show
+PUSH x05 # How many bytes to show after memory address
+PUSH x03 # Starting memory address
+LOG1
+PUSH x63 # Logging data to show
+PUSH x62 # How many bytes to show after memory address
+PUSH x05 # Starting memory address
+PUSH x03 # Starting memory address
+LOG2
+# MSTORE8
+# PUSH x63
+# PUSH x02
+# MSTORE8
+# PUSH 0x00
+# PUSH 0x61
+# LOG0
