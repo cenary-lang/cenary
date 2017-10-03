@@ -47,6 +47,7 @@ toByteCode "DIV" = 0x04
 toByteCode "POP" = 0x50
 toByteCode "MLOAD" = 0x51
 toByteCode "MSTORE" = 0x52
+toByteCode "MSTORE8" = 0x53
 toByteCode "JUMP" = 0x56
 toByteCode "JUMPI" = 0x57
 toByteCode "SWAP1" = 0x90
@@ -54,6 +55,9 @@ toByteCode "SWAP2" = 0x91
 toByteCode "DUP1" = 0x80
 toByteCode "JUMPDEST" = 0x5b
 toByteCode "PC" = 0x58
+toByteCode "LOG0" = 0xA0
+toByteCode "LOG1" = 0xA1
+toByteCode "LOG2" = 0xA2
 toByteCode other = error $ "Instruction " <> other <> " is not recognised."
 
 toByteCode1 :: String -> Integer -> [Integer]
