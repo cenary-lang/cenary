@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -7,7 +6,6 @@ module Main where
 ------------------------------------------------------
 import           Control.Applicative
 import           Control.Monad.State
-import Text.Parsec (ParseError)
 import           Control.Monad.Logger
 import           Control.Monad.Except
 import           Data.Monoid          ((<>))
@@ -15,16 +13,16 @@ import           Data.Text            as T
 import           Data.Text.IO         as T
 import           System.Environment
 import           System.Process
-import           System.IO (hClose)
+import           System.IO            (hClose)
+import           Text.Parsec          (ParseError)
 ------------------------------------------------------
 import qualified Ivy.Codegen         as C
 import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
-                                       runEvm)
+                                       runEvm, CodegenError(..))
 import qualified Ivy.Parser          as P
 import qualified Ivy.Syntax          as S
-import           Options              (Options (..), Mode (..), parseOptions, debug)
+import           Options             (Options (..), Mode (..), parseOptions, debug)
 import           Utils.EvmAsm        (asm)
-import Ivy.Codegen.Types (CodegenError(..))
 ------------------------------------------------------
 
 data Error =
