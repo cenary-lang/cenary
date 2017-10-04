@@ -163,6 +163,14 @@ codegenTop (BinaryOp op expr1 expr2) = do
         OpDiv -> binOp IntT DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
+codegenTop (Debug expr) = do
+  Operand _ty addr <- codegenTopOperand expr
+  op2 PUSH32 addr
+  op MLOAD
+  op2 PUSH32 0x05
+  op2 PUSH32 0x03
+  op LOG1
+  return Nothing
 -- checkTyEq :: Type -> Type -> Evm Type
 -- checkTyEq ty1 ty2 =
 --   case (ty1, ty2) of

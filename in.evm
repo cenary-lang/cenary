@@ -6,14 +6,7 @@ PUSH x05 # How many bytes to show after memory address
 PUSH x03 # Starting memory address
 LOG1
 PUSH x63 # Logging data to show
-PUSH x62 # How many bytes to show after memory address
-PUSH x05 # Starting memory address
+PUSH x62 # Logging data 2 to show
+PUSH x05 # Memory address
 PUSH x03 # Starting memory address
 LOG2
-# MSTORE8
-# PUSH x63
-# PUSH x02
-# MSTORE8
-# PUSH 0x00
-# PUSH 0x61
-# LOG0

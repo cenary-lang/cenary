@@ -84,13 +84,22 @@ assignment = do
   return (Assignment name val)
   <?> "assignment"
 
+debug :: Parser Expr
+debug = do
+  reserved "debug"
+  char '('
+  val <- expr
+  char ')'
+  return (Debug val)
+
 factor :: Parser Expr
 factor = try (parens expr <?> "parens")
      <|> try timesIterationBegin
      <|> try prims
      <|> try assignment
      <|> try varDecl
-     <|> (Identifier <$> identifier <?> "identifier")
+     <|> try (Identifier <$> identifier <?> "identifier")
+     <|> debug
      <?>  "factor"
 
 topLevel :: Parser [Expr]

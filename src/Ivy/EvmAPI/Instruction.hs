@@ -34,6 +34,9 @@ data Instruction =
   | DUP1
   | SWAP1
   | SWAP2
+  | LOG0
+  | LOG1
+  | LOG2
   | RETURN
 
 toInstrCode :: Instruction -> Integer
@@ -55,6 +58,9 @@ toInstrCode PUSH32 = 0x7f
 toInstrCode DUP1 = 0x80
 toInstrCode SWAP1 = 0x90
 toInstrCode SWAP2 = 0x91
+toInstrCode LOG0 = 0xA0
+toInstrCode LOG1 = 0xA1
+toInstrCode LOG2 = 0xA2
 toInstrCode RETURN = 0xf3
 
 addBC :: Integer -> Evm ()

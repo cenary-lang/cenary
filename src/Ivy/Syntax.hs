@@ -25,4 +25,5 @@ data Expr =
   | Assignment Name Expr
   | BinaryOp Op Expr Expr
   | Times Integer Block
+  | Debug Expr
   deriving Show

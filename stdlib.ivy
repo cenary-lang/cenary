@@ -16,3 +16,4 @@ a = a + 3;
 char q;
 
 q = 'w';
+debug(a);
