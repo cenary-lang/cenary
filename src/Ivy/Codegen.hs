@@ -59,23 +59,26 @@ lookup name = do
   l <- M.lookup name <$> use localScope
   decide g l
   where
-    -- FIXME
     decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
-    decide Nothing           Nothing           = return NotDeclared
-    decide Nothing           (Just (ty, Nothing))    = return $ Decl ty Local
-    decide Nothing           (Just (ty, Just val)) = return $ Def ty Local val
-    decide (Just (ty, Nothing))    Nothing           = return $ Decl ty Global
+    decide Nothing                   Nothing                = return NotDeclared
+    decide Nothing                   (Just (ty, Nothing))   = return $ Decl ty Local
+    decide Nothing                   (Just (ty, Just val))  = return $ Def ty Local val
+    decide (Just (ty, Nothing))      Nothing                = return $ Decl ty Global
     decide (Just (_ty1, Nothing))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-    decide (Just (ty1, Nothing))    (Just (ty2, Just val)) =
+    decide (Just (ty1, Nothing))     (Just (ty2, Just val)) =
       if ty1 == ty2
          then return $ Def ty1 Local val
          else throwError (ScopedTypeViolation name ty1 ty2)
-    decide (Just (ty, Just val)) Nothing           = return $ Def ty Global val
-    decide (Just (_ty1, Just val)) (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-    decide (Just (ty1, Just _))   (Just (ty2, Just val)) =
+    decide (Just (ty, Just val))      Nothing                = return $ Def ty Global val
+    decide (Just (_ty1, Just val))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
+    decide (Just (ty1, Just _))       (Just (ty2, Just val)) =
       if ty1 == ty2
          then return $ Def ty1 Local val -- Local value overrides
          else throwError (ScopedTypeViolation name ty1 ty2)
+
+checkTyEq :: Name -> PrimType -> PrimType -> Evm ()
+checkTyEq name tyL tyR =
+  unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
 codegenTop :: Expr -> Evm (Maybe Operand)
 codegenTop (Times until block) = do
@@ -109,24 +112,31 @@ codegenTop (Assignment name val) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl tyL _ -> do
-      unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
+      checkTyEq name tyL tyR
       op2 PUSH32 addr
       op MLOAD
       newAddr <- alloc
       op2 PUSH32 newAddr
       op MSTORE
       assign tyL name newAddr
-      -- updateSymTable level $ M.update (const (Just (Just newAddr))) name
       return Nothing
     Def tyL _ oldAddr -> do
-      unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
+      checkTyEq name tyL tyR
       op2 PUSH32 addr
       op MLOAD
       op2 PUSH32 oldAddr
       op MSTORE
       assign tyL name oldAddr
-      -- updateSymTable level $ M.update (const (Just (Just oldAddr))) name
       return Nothing
+
+-- codegenTop (ArrAssignment name index val) = do
+--   Operand tyR addr <- codegenTopOperand val
+--   lookup name >>= \case
+--     NotDeclared -> throwError $ VariableNotDeclared name
+--     Decl tyL _ -> do
+--       checkTyEq tyL tyR
+--       op2 PUSH32 (addr + 0x32 * index)
+--       op MLOAD
 
 codegenTop (VarDecl ty name) =
   Nothing <$ decl ty name

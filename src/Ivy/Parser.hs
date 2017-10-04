@@ -49,7 +49,7 @@ expr = buildExpressionParser binops factor
 
 array :: Parser PrimType
 array = do
-  type' <- (string "int" $> IntT) <|> (string "char" $> CharT)
+  type' <- try (string "int" $> IntT) <|> string "char" $> CharT
   char '['
   size <- integer
   char ']'
@@ -85,12 +85,20 @@ timesIterationBegin = do
 assignment :: Parser Expr
 assignment = do
   name <- identifier
-  whitespace
   reserved "="
-  whitespace
   val <- expr
   return (Assignment name val)
   <?> "assignment"
+
+arrAssignment :: Parser Expr
+arrAssignment = do
+  name <- identifier
+  char '['
+  index <- integer
+  char ']'
+  reserved "="
+  val <- expr
+  return (ArrAssignment name index val)
 
 debug :: Parser Expr
 debug = do
@@ -105,6 +113,7 @@ factor = (parens expr <?> "parens")
      <|> try timesIterationBegin
      <|> try prims
      <|> try assignment
+     <|> try arrAssignment
      <|> try varDecl
      <|> try (Identifier <$> identifier <?> "identifier")
      <|> debug

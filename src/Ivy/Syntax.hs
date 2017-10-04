@@ -13,6 +13,7 @@ data Op =
   deriving Show
 
 type Size = Integer
+type Index = Integer
 
 data PrimType =
     IntT
@@ -26,6 +27,7 @@ data Expr =
   | Identifier Name
   | VarDecl PrimType Name
   | Assignment Name Expr
+  | ArrAssignment Name Index Expr
   | BinaryOp Op Expr Expr
   | Times Integer Block
   | Debug Expr

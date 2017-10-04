@@ -52,6 +52,7 @@ newtype Evm a = Evm { runEvm :: StateT CodegenState (LoggingT (ExceptT CodegenEr
   deriving (Functor, Applicative, Monad, MonadIO, MonadState CodegenState, MonadError CodegenError, MonadLogger)
 
 type ScopeLevel = Int
+type Address = Integer
 
 data Scope = Local | Global
 data VariableStatus = NotDeclared
@@ -59,7 +60,7 @@ data VariableStatus = NotDeclared
                     | Decl S.PrimType Scope
                     | Error CodegenError
 
-type SymbolTable = M.Map String (S.PrimType, Maybe Integer)
+type SymbolTable = M.Map String (S.PrimType, Maybe Address)
 
 data CodegenState = CodegenState
   { _byteCode    :: !T.Text
