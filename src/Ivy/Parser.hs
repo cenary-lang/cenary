@@ -27,7 +27,7 @@ primChar = do
   return (CharExpr c)
 
 prims :: Parser Expr
-prims = (IntExpr <$> integer)
+prims = try (IntExpr <$> integer)
     <|> primChar
     <?> "primitive"
 
@@ -47,14 +47,22 @@ binops = [ [ binary "*" OpMul AssocLeft
 expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
-typeDecl :: Parser PrimType
-typeDecl = reserved "int" $> IntT
-       <|> reserved "char" $> CharT
+array :: Parser PrimType
+array = do
+  type' <- (string "int" $> IntT) <|> (string "char" $> CharT)
+  char '['
+  size <- integer
+  char ']'
+  return (Array size type')
+
+primType :: Parser PrimType
+primType = try (string "int" $> IntT)
+       <|> string "char" $> CharT
        <?> "type declaration"
 
 varDecl :: Parser Expr
 varDecl = do
-  type' <- typeDecl
+  type' <- try array <|> primType
   whitespace
   name <- identifier
   return $ VarDecl type' name
@@ -93,7 +101,7 @@ debug = do
   return (Debug val)
 
 factor :: Parser Expr
-factor = try (parens expr <?> "parens")
+factor = (parens expr <?> "parens")
      <|> try timesIterationBegin
      <|> try prims
      <|> try assignment
