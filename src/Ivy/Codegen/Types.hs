@@ -23,13 +23,13 @@ data CodegenError =
     VariableNotDeclared String
   | VariableAlreadyDeclared String
   | VariableNotDefined String
-  | TypeMismatch String S.Type S.Type
-  | ScopedTypeViolation String S.Type S.Type
+  | TypeMismatch String S.PrimType S.PrimType
+  | ScopedTypeViolation String S.PrimType S.PrimType
   | InternalError String
-  | WrongOperandTypes S.Type S.Type
+  | WrongOperandTypes S.PrimType S.PrimType
 
 type Addr = Integer
-data Operand = Operand S.Type Addr
+data Operand = Operand S.PrimType Addr
 
 instance Show CodegenError where
   show (VariableNotDeclared var) = "Variable " <> var <> " is not declared."
@@ -55,11 +55,11 @@ type ScopeLevel = Int
 
 data Scope = Local | Global
 data VariableStatus = NotDeclared
-                    | Def S.Type Scope Integer
-                    | Decl S.Type Scope
+                    | Def S.PrimType Scope Integer
+                    | Decl S.PrimType Scope
                     | Error CodegenError
 
-type SymbolTable = M.Map String (S.Type, Maybe Integer)
+type SymbolTable = M.Map String (S.PrimType, Maybe Integer)
 
 data CodegenState = CodegenState
   { _byteCode    :: !T.Text

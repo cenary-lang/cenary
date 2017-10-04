@@ -15,5 +15,5 @@ endtimes;
 a = a + 3;
 char q;
 
-q = 'w';
-debug(a);
+char[5] myarr;
+myarr = { 'a', 'b', 'c', 'd', 'e' };

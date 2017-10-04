@@ -34,7 +34,7 @@ executeBlock (Block bodyExpr) = do
   globalScope .= g -- Reset global scope
   localScope .= l -- Reset local scope
 
-assign :: Type -> Name -> Integer -> Evm ()
+assign :: PrimType -> Name -> Integer -> Evm ()
 assign ty name addr = do
   g <- use globalScope
   l <- use localScope
@@ -46,7 +46,7 @@ assign ty name addr = do
         Just _addr' -> localScope %= M.update (const (Just (ty, Just addr))) name
         Nothing -> throwError (VariableNotDeclared name)
 
-decl :: Type -> Name -> Evm ()
+decl :: PrimType -> Name -> Evm ()
 decl ty name = do
   l <- use localScope
   case M.lookup name l of
@@ -60,7 +60,7 @@ lookup name = do
   decide g l
   where
     -- FIXME
-    decide :: Maybe (Type, Maybe Integer) -> Maybe (Type, Maybe Integer) -> Evm VariableStatus
+    decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
     decide Nothing           Nothing           = return NotDeclared
     decide Nothing           (Just (ty, Nothing))    = return $ Decl ty Local
     decide Nothing           (Just (ty, Just val)) = return $ Def ty Local val
@@ -137,14 +137,14 @@ codegenTop (Identifier name) = do
     Decl _ _ -> throwError (VariableNotDefined name)
     Def ty _ addr -> return (Just (Operand ty addr))
 
-codegenTop (PrimInt val) = do
+codegenTop (IntExpr val) = do
   addr <- alloc
   op2 PUSH32 val
   op2 PUSH32 addr
   op MSTORE
   return (Just (Operand IntT addr))
 
-codegenTop (PrimChar val) = do
+codegenTop (CharExpr val) = do
   addr <- alloc
   op2 PUSH32 (fromIntegral (ord val))
   op2 PUSH32 addr

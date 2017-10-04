@@ -24,10 +24,10 @@ text input = T.pack <$> string (T.unpack input)
 primChar :: Parser Expr
 primChar = do
   c <- charLiteral
-  return (PrimChar c)
+  return (CharExpr c)
 
 prims :: Parser Expr
-prims = (PrimInt <$> integer)
+prims = (IntExpr <$> integer)
     <|> primChar
     <?> "primitive"
 
@@ -47,7 +47,7 @@ binops = [ [ binary "*" OpMul AssocLeft
 expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
-typeDecl :: Parser Type
+typeDecl :: Parser PrimType
 typeDecl = reserved "int" $> IntT
        <|> reserved "char" $> CharT
        <?> "type declaration"

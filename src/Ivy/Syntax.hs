@@ -12,16 +12,19 @@ data Op =
   | OpDiv
   deriving Show
 
-data Type =
+type Size = Integer
+
+data PrimType =
     IntT
   | CharT
+  | Array Size PrimType
   deriving (Eq, Show)
 
 data Expr =
-    PrimInt Integer
-  | PrimChar Char
+    IntExpr Integer
+  | CharExpr Char
   | Identifier Name
-  | VarDecl Type Name
+  | VarDecl PrimType Name
   | Assignment Name Expr
   | BinaryOp Op Expr Expr
   | Times Integer Block

@@ -75,7 +75,7 @@ op2 = curry ((op *** addBC) >>> uncurry (>>))
 alloc :: Evm Integer
 alloc = memPointer <+= 32
 
-binOp :: S.Type -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
+binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do
   op2 PUSH32 left
   op MLOAD
