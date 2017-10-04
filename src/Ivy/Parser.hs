@@ -85,7 +85,9 @@ timesIterationBegin = do
 assignment :: Parser Expr
 assignment = do
   name <- identifier
+  whitespace
   reserved "="
+  whitespace
   val <- expr
   return (Assignment name val)
   <?> "assignment"
@@ -96,9 +98,12 @@ arrAssignment = do
   char '['
   index <- integer
   char ']'
+  whitespace
   reserved "="
+  whitespace
   val <- expr
   return (ArrAssignment name index val)
+  <?> "array assignment"
 
 debug :: Parser Expr
 debug = do
@@ -107,14 +112,15 @@ debug = do
   val <- expr
   char ')'
   return (Debug val)
+  <?> "debug"
 
 factor :: Parser Expr
-factor = (parens expr <?> "parens")
+factor = try (parens expr <?> "parens")
      <|> try timesIterationBegin
      <|> try prims
-     <|> try assignment
-     <|> try arrAssignment
      <|> try varDecl
+     <|> arrAssignment
+     <|> try assignment
      <|> try (Identifier <$> identifier <?> "identifier")
      <|> debug
      <?>  "factor"

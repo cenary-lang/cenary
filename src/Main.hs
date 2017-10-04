@@ -59,9 +59,6 @@ execByteCode byteCode = do
 main :: IO ()
 main = do
   (Options mode inputFile) <- parseOptions
-  print mode
-  print inputFile
-
   code <- T.readFile inputFile
   result <- runExceptT (go code mode)
   case result of

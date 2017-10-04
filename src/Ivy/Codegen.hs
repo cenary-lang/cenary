@@ -46,13 +46,6 @@ assign ty name addr = do
         Just _addr' -> localScope %= M.update (const (Just (ty, Just addr))) name
         Nothing -> throwError (VariableNotDeclared name)
 
-decl :: PrimType -> Name -> Evm ()
-decl ty name = do
-  l <- use localScope
-  case M.lookup name l of
-    Nothing -> localScope %= M.insert name (ty, Nothing)
-    Just _ -> throwError (VariableAlreadyDeclared name)
-
 lookup :: String -> Evm VariableStatus
 lookup name = do
   g <- M.lookup name <$> use globalScope
@@ -129,17 +122,31 @@ codegenTop (Assignment name val) = do
       assign tyL name oldAddr
       return Nothing
 
--- codegenTop (ArrAssignment name index val) = do
---   Operand tyR addr <- codegenTopOperand val
---   lookup name >>= \case
---     NotDeclared -> throwError $ VariableNotDeclared name
---     Decl tyL _ -> do
---       checkTyEq tyL tyR
---       op2 PUSH32 (addr + 0x32 * index)
---       op MLOAD
+codegenTop (ArrAssignment name index val) = do
+  Operand tyR addr <- codegenTopOperand val
+  lookup name >>= \case
+    NotDeclared -> throwError $ VariableNotDeclared name
+    Decl _tyL _ -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
+    Def (Array _size aTy) _ oldAddr -> do
+      checkTyEq name aTy tyR
+      op2 PUSH32 (addr + 0x32 * index)
+      op MLOAD
+      op2 PUSH32 oldAddr
+      op MSTORE
+      -- assign tyL name oldAddr
+      return Nothing
+    Def other _ _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 
-codegenTop (VarDecl ty name) =
-  Nothing <$ decl ty name
+codegenTop (VarDecl ty name) = do
+  l <- use localScope
+  case M.lookup name l of
+    Just _ -> throwError (VariableAlreadyDeclared name)
+    Nothing -> do
+      mb_addr <- case ty of
+        Array size aTy -> Just <$> allocBulk size
+        _              -> return Nothing
+      localScope %= M.insert name (ty, mb_addr)
+  return Nothing
 
 codegenTop (Identifier name) = do
   lookup name >>= \case
@@ -181,11 +188,6 @@ codegenTop (Debug expr) = do
   op2 PUSH32 0x03
   op LOG1
   return Nothing
--- checkTyEq :: Type -> Type -> Evm Type
--- checkTyEq ty1 ty2 =
---   case (ty1, ty2) of
---     (IntT, IntT) -> return IntT
---     _            -> throwError $ TypeMismatch $ "Expected " <> T.pack (show ty1) <> " and " <> T.pack (show ty2) <> "to have equal types"
 
 getEnv :: Evm SymbolTable
 getEnv = liftA2 (<>) (use localScope) (use globalScope)

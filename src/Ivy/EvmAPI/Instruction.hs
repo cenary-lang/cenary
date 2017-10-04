@@ -73,7 +73,10 @@ op2 :: Instruction -> Integer -> Evm ()
 op2 = curry ((op *** addBC) >>> uncurry (>>))
 
 alloc :: Evm Integer
-alloc = memPointer <+= 32
+alloc = memPointer <<+= 32
+
+allocBulk :: Integer -> Evm Integer
+allocBulk size = memPointer <<+= (size * 32)
 
 binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do

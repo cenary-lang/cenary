@@ -56,8 +56,8 @@ type Address = Integer
 
 data Scope = Local | Global
 data VariableStatus = NotDeclared
-                    | Def S.PrimType Scope Integer
                     | Decl S.PrimType Scope
+                    | Def S.PrimType Scope Integer
                     | Error CodegenError
 
 type SymbolTable = M.Map String (S.PrimType, Maybe Address)
@@ -74,7 +74,7 @@ makeLenses ''CodegenState
 initCodegenState :: CodegenState
 initCodegenState = CodegenState
   { _byteCode   = ""
-  , _memPointer = -32
+  , _memPointer = 0
   , _globalScope = M.empty
   , _localScope = M.empty
   }
