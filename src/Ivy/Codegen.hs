@@ -108,9 +108,9 @@ codegenTop (Assignment name val) = do
       checkTyEq name tyL tyR
       op2 PUSH32 addr
       op MLOAD
-      newAddr <- alloc
+      newAddr <- alloc (sizeof tyR)
       op2 PUSH32 newAddr
-      op MSTORE
+      store (sizeof tyR)
       assign tyL name newAddr
       return Nothing
     Def tyL _ oldAddr -> do
@@ -118,7 +118,7 @@ codegenTop (Assignment name val) = do
       op2 PUSH32 addr
       op MLOAD
       op2 PUSH32 oldAddr
-      op MSTORE
+      store (sizeof tyL)
       assign tyL name oldAddr
       return Nothing
 
@@ -129,7 +129,7 @@ codegenTop (ArrAssignment name index val) = do
     Decl _tyL _ -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
     Def (Array _size aTy) _ oldAddr -> do
       checkTyEq name aTy tyR
-      op2 PUSH32 (addr + 0x32 * index)
+      op2 PUSH32 (addr + sizeof aTy * index)
       op MLOAD
       op2 PUSH32 oldAddr
       op MSTORE
@@ -143,7 +143,7 @@ codegenTop (VarDecl ty name) = do
     Just _ -> throwError (VariableAlreadyDeclared name)
     Nothing -> do
       mb_addr <- case ty of
-        Array size aTy -> Just <$> allocBulk size
+        Array size aTy -> Just <$> allocBulk (size * sizeof aTy)
         _              -> return Nothing
       localScope %= M.insert name (ty, mb_addr)
   return Nothing
@@ -155,17 +155,17 @@ codegenTop (Identifier name) = do
     Def ty _ addr -> return (Just (Operand ty addr))
 
 codegenTop (IntExpr val) = do
-  addr <- alloc
+  addr <- alloc (sizeof IntT)
   op2 PUSH32 val
   op2 PUSH32 addr
   op MSTORE
   return (Just (Operand IntT addr))
 
 codegenTop (CharExpr val) = do
-  addr <- alloc
+  addr <- alloc (sizeof CharT)
   op2 PUSH32 (fromIntegral (ord val))
   op2 PUSH32 addr
-  op MSTORE
+  op MSTORE8
   return (Just (Operand CharT addr))
 
 codegenTop (BinaryOp op expr1 expr2) = do

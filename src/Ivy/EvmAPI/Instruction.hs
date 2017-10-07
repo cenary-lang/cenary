@@ -5,6 +5,7 @@ module Ivy.EvmAPI.Instruction where
 --------------------------------------------------------------------------------
 import           Control.Arrow
 import           Control.Applicative
+import           Control.Monad.Except
 import           Control.Lens hiding (op)
 import           Control.Monad.State
 import           Control.Monad.Writer
@@ -24,6 +25,7 @@ data Instruction =
   | POP
   | MLOAD
   | MSTORE
+  | MSTORE8
   | JUMP
   | JUMPI
   | PC
@@ -48,6 +50,7 @@ toInstrCode DIV = 0x04
 toInstrCode POP = 0x50
 toInstrCode MLOAD = 0x51
 toInstrCode MSTORE = 0x52
+toInstrCode MSTORE8 = 0x53
 toInstrCode JUMP = 0x56
 toInstrCode JUMPI = 0x57
 toInstrCode PC = 0x58
@@ -72,11 +75,16 @@ op instr = byteCode <>= T.pack (printf "%02x" (toInstrCode instr))
 op2 :: Instruction -> Integer -> Evm ()
 op2 = curry ((op *** addBC) >>> uncurry (>>))
 
-alloc :: Evm Integer
-alloc = memPointer <<+= 32
+alloc :: Size -> Evm Integer
+alloc size = memPointer <<+= size
 
 allocBulk :: Integer -> Evm Integer
 allocBulk size = memPointer <<+= (size * 32)
+
+store :: Size -> Evm ()
+store 1 = op MSTORE8
+store 32 = op MSTORE
+store other = throwError $ InternalError $ "Cannot store " <> show other <> " bytes, it's not implemented."
 
 binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do
@@ -85,7 +93,7 @@ binOp t instr left right = do
   op2 PUSH32 right
   op MLOAD
   op instr
-  addr <- alloc
+  addr <- alloc (sizeof S.IntT)
   op2 PUSH32 addr
   op MSTORE
   return (Just (Operand t addr))

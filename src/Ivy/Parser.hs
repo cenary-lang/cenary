@@ -119,7 +119,7 @@ factor = try (parens expr <?> "parens")
      <|> try timesIterationBegin
      <|> try prims
      <|> try varDecl
-     <|> arrAssignment
+     <|> try arrAssignment
      <|> try assignment
      <|> try (Identifier <$> identifier <?> "identifier")
      <|> debug

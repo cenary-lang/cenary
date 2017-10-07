@@ -13,12 +13,13 @@ data Op =
   deriving Show
 
 type Size = Integer
+type Length = Integer
 type Index = Integer
 
 data PrimType =
     IntT
   | CharT
-  | Array Size PrimType
+  | Array Length PrimType
   deriving (Eq, Show)
 
 data Expr =

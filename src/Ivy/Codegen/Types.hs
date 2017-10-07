@@ -16,20 +16,21 @@ import qualified Data.Map              as M
 import           Data.Semigroup        ((<>))
 import qualified Data.Text             as T
 --------------------------------------------------------------------------------
-import qualified Ivy.Syntax            as S
+import           Ivy.Syntax            (PrimType(..))
 --------------------------------------------------------------------------------
 
 data CodegenError =
     VariableNotDeclared String
   | VariableAlreadyDeclared String
   | VariableNotDefined String
-  | TypeMismatch String S.PrimType S.PrimType
-  | ScopedTypeViolation String S.PrimType S.PrimType
+  | TypeMismatch String PrimType PrimType
+  | ScopedTypeViolation String PrimType PrimType
   | InternalError String
-  | WrongOperandTypes S.PrimType S.PrimType
+  | WrongOperandTypes PrimType PrimType
 
 type Addr = Integer
-data Operand = Operand S.PrimType Addr
+data Operand = Operand PrimType Addr
+type Size = Integer -- In bytes
 
 instance Show CodegenError where
   show (VariableNotDeclared var) = "Variable " <> var <> " is not declared."
@@ -56,11 +57,11 @@ type Address = Integer
 
 data Scope = Local | Global
 data VariableStatus = NotDeclared
-                    | Decl S.PrimType Scope
-                    | Def S.PrimType Scope Integer
+                    | Decl PrimType Scope
+                    | Def PrimType Scope Integer
                     | Error CodegenError
 
-type SymbolTable = M.Map String (S.PrimType, Maybe Address)
+type SymbolTable = M.Map String (PrimType, Maybe Address)
 
 data CodegenState = CodegenState
   { _byteCode    :: !T.Text
@@ -70,6 +71,11 @@ data CodegenState = CodegenState
   }
 
 makeLenses ''CodegenState
+
+sizeof :: PrimType -> Integer
+sizeof IntT = 32
+sizeof CharT = 1
+sizeof (Array length ty) = length * sizeof ty
 
 initCodegenState :: CodegenState
 initCodegenState = CodegenState

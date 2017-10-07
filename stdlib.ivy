@@ -1,3 +1,8 @@
-char[5] m;
-m[0] = 'a';
-m[1] = 'b';
+char a; char b; char c; char d; char e;
+int k;
+a = 'y';
+b = 'i';
+c = 'g';
+d = 'i';
+e = 't';
+k = 4;

@@ -70,7 +70,10 @@ main = do
       case mode of
         Run -> do
           ast <- parse code
-          codegen mode initCodegenState ast >>= liftIO . execByteCode >>= liftIO . T.putStrLn
+          byteCode <- codegen mode initCodegenState ast
+          result <- liftIO (execByteCode byteCode)
+          liftIO (T.putStrLn ("Bytecode: " <> byteCode))
+          liftIO (T.putStrLn result)
           liftIO $ print ast
         Debug ->
           void $ parse code >>= codegen mode initCodegenState

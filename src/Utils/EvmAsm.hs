@@ -61,14 +61,16 @@ toByteCode "LOG2" = 0xA2
 toByteCode other = error $ "Instruction " <> other <> " is not recognised."
 
 toByteCode1 :: String -> Integer -> [Integer]
-toByteCode1 "PUSH" val = [0x60, val]
+toByteCode1 "PUSH" val = [0x7f, val]
 
 instruction :: Parser ByteCode
 instruction = do
   instr <- many1 alphaNum
   arg <- optionMaybe (space >> hexadecimal)
   let result = case arg of
-        Just val -> mconcat $ map (ByteCode . T.pack . printf "%02x") $ toByteCode1 instr val
+        Just val ->
+          let [instr', val'] = toByteCode1 instr val in
+          ByteCode (T.pack (printf "%02x" instr')) <> ByteCode (T.pack (printf "%064x" val'))
         Nothing -> ByteCode $ T.pack $ printf "%02x" $ toByteCode instr
   optionMaybe (spaces >> char '#' >> spaces)
   return result
