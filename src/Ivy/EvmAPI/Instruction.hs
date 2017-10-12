@@ -72,19 +72,34 @@ addBC val = byteCode <>= T.pack (printf "%064x" val)
 op :: Instruction -> Evm ()
 op instr = byteCode <>= T.pack (printf "%02x" (toInstrCode instr))
 
+-- I forgot what this does after 10 minutes
 op2 :: Instruction -> Integer -> Evm ()
 op2 = curry ((op *** addBC) >>> uncurry (>>))
 
-alloc :: Size -> Evm Integer
-alloc size = memPointer <<+= size
+load
+  :: Size
+  -> Address
+  -> Evm ()
+load size addr = do
+  op2 PUSH32 addr
+  op MLOAD
+  op2 PUSH32 (0x10 ^ (32 - 8))
+  op DIV
 
-allocBulk :: Integer -> Evm Integer
-allocBulk size = memPointer <<+= (size * 32)
+store
+  :: Size    -- Variable size
+  -> Integer -- Address of the value. Value should be loaded from this address
+  -> Integer -- Address to put value on
+  -> Evm ()
+store size valAddr destAddr = do
+  load size valAddr
+  op2 PUSH32 destAddr
+  op MSTORE8
 
-store :: Size -> Evm ()
-store 1 = op MSTORE8
-store 32 = op MSTORE
-store other = throwError $ InternalError $ "Cannot store " <> show other <> " bytes, it's not implemented."
+-- store :: Size -> Evm ()
+-- store Size_1 = op MSTORE8
+-- store Size_32 = op MSTORE
+-- store other = throwError $ InternalError $ "Cannot store " <> show other <> " bytes, it's not implemented."
 
 binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do

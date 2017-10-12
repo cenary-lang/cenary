@@ -106,19 +106,19 @@ codegenTop (Assignment name val) = do
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl tyL _ -> do
       checkTyEq name tyL tyR
-      op2 PUSH32 addr
-      op MLOAD
+      -- op2 PUSH32 addr
+      -- op MLOAD
       newAddr <- alloc (sizeof tyR)
-      op2 PUSH32 newAddr
-      store (sizeof tyR)
+      -- op2 PUSH32 newAddr
+      store (sizeof tyR) addr newAddr
       assign tyL name newAddr
       return Nothing
     Def tyL _ oldAddr -> do
       checkTyEq name tyL tyR
-      op2 PUSH32 addr
-      op MLOAD
-      op2 PUSH32 oldAddr
-      store (sizeof tyL)
+      -- op2 PUSH32 addr
+      -- op MLOAD
+      -- op2 PUSH32 oldAddr
+      store (sizeof tyL) addr oldAddr
       assign tyL name oldAddr
       return Nothing
 
@@ -129,7 +129,7 @@ codegenTop (ArrAssignment name index val) = do
     Decl _tyL _ -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
     Def (Array _size aTy) _ oldAddr -> do
       checkTyEq name aTy tyR
-      op2 PUSH32 (addr + sizeof aTy * index)
+      op2 PUSH32 (addr + sizeInt (sizeof aTy) * index)
       op MLOAD
       op2 PUSH32 oldAddr
       op MSTORE
@@ -143,8 +143,8 @@ codegenTop (VarDecl ty name) = do
     Just _ -> throwError (VariableAlreadyDeclared name)
     Nothing -> do
       mb_addr <- case ty of
-        Array size aTy -> Just <$> allocBulk (size * sizeof aTy)
-        _              -> return Nothing
+          Array length aTy -> Just <$> allocBulk length (sizeof aTy)
+          _              -> return Nothing
       localScope %= M.insert name (ty, mb_addr)
   return Nothing
 
@@ -156,16 +156,12 @@ codegenTop (Identifier name) = do
 
 codegenTop (IntExpr val) = do
   addr <- alloc (sizeof IntT)
-  op2 PUSH32 val
-  op2 PUSH32 addr
-  op MSTORE
+  store (sizeof IntT) val addr
   return (Just (Operand IntT addr))
 
 codegenTop (CharExpr val) = do
   addr <- alloc (sizeof CharT)
-  op2 PUSH32 (fromIntegral (ord val))
-  op2 PUSH32 addr
-  op MSTORE8
+  store (sizeof CharT) (fromIntegral (ord val)) addr
   return (Just (Operand CharT addr))
 
 codegenTop (BinaryOp op expr1 expr2) = do
@@ -202,9 +198,11 @@ log :: Show a => T.Text -> a -> Evm ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 
 codegenTop' :: Expr -> Evm (Maybe Operand)
-codegenTop' expr = do
-  log "Expr" expr
-  use byteCode >>= log "ByteCode"
-  use localScope >>= log "LocalScope"
-  use globalScope >>= log "GlobalScope"
+codegenTop' expr =
+  -- log "Expr" expr
+  -- use byteCode >>= log "ByteCode"
+  -- use localScope >>= log "LocalScope"
+  -- use globalScope >>= log "GlobalScope"
+  -- use memory >>= log "Memory"
+  -- use memPointers >>= log "MemPointers"
   codegenTop expr

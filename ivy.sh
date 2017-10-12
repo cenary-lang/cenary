@@ -12,12 +12,16 @@ function disasm {
   $EXECUTABLE -m disasm -i stdlib.ivy
 }
 
-function run {
-  $EXECUTABLE -m run -i stdlib.ivy
+function ast {
+  $EXECUTABLE -m ast -i stdlib.ivy
 }
 
-function debug {
-  $EXECUTABLE -m debug -i stdlib.ivy
+function bytecode {
+  $EXECUTABLE -m bytecode -i stdlib.ivy
+}
+
+function run {
+  $EXECUTABLE -m run -i stdlib.ivy
 }
 
 function asm {
@@ -31,8 +35,11 @@ clear)
 compile)
   compile
   ;;
-debug)
-  debug
+ast)
+  ast
+  ;;
+bytecode)
+  bytecode
   ;;
 run)
   run

@@ -13,22 +13,19 @@ data Options = Options
   , _inputFile :: FilePath
   }
 
-data Mode = Debug | Run | Disasm | Asm
+data Mode = Ast | ByteCode | Run | Disasm | Asm
   deriving Show
 
 instance IsString Mode where
-  fromString "debug"  = Debug
-  fromString "run"    = Run
-  fromString "disasm" = Disasm
-  fromString "asm"    = Asm
-
-debug :: Mode -> Bool
-debug Debug = True
-debug _     = False
+  fromString "ast"      = Ast
+  fromString "bytecode" = ByteCode
+  fromString "run"      = Run
+  fromString "disasm"   = Disasm
+  fromString "asm"      = Asm
 
 parseMode :: Parser Mode
 parseMode =
-  fromString <$> strOption (long "mode" <> short 'm' <> help "Mode of the execution. `debug` or `run`")
+  fromString <$> strOption (long "mode" <> short 'm' <> help "Mode of the execution. Available options: ast, bytecode, run, disasm, asm")
 
 optParser :: Parser Options
 optParser = Options

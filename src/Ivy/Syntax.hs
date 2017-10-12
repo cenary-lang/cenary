@@ -12,7 +12,6 @@ data Op =
   | OpDiv
   deriving Show
 
-type Size = Integer
 type Length = Integer
 type Index = Integer
 

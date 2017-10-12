@@ -21,7 +21,7 @@ import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
                                        runEvm, CodegenError(..))
 import qualified Ivy.Parser          as P
 import qualified Ivy.Syntax          as S
-import           Options             (Options (..), Mode (..), parseOptions, debug)
+import           Options             (Options (..), Mode (..), parseOptions)
 import           Utils.EvmAsm        (asm)
 ------------------------------------------------------
 
@@ -44,17 +44,17 @@ codegen mode state (e:ex) = do
     Right newState ->
       (_byteCode newState <>) <$> codegen mode newState ex
 
-parse :: T.Text -> ExceptT Error IO [S.Expr]
+parse :: MonadIO m => T.Text -> ExceptT Error m [S.Expr]
 parse code =
   case P.parseTopLevel code of
     Left (Parsing -> err) -> throwError err
     Right result -> return result
 
-execByteCode :: T.Text -> IO T.Text
+execByteCode :: MonadIO m => T.Text -> m ()
 execByteCode byteCode = do
-  (_, Just hout, _, _) <- createProcess
+  (_, Just hout, _, _) <- liftIO $ createProcess
     (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]) { std_out = CreatePipe }
-  hGetContents hout <* hClose hout
+  void $ liftIO (hGetContents hout) <* liftIO (hClose hout)
 
 main :: IO ()
 main = do
@@ -68,19 +68,15 @@ main = do
     go :: T.Text -> Mode -> ExceptT Error IO ()
     go code mode = 
       case mode of
-        Run -> do
-          ast <- parse code
-          byteCode <- codegen mode initCodegenState ast
-          result <- liftIO (execByteCode byteCode)
-          liftIO (T.putStrLn ("Bytecode: " <> byteCode))
-          liftIO (T.putStrLn result)
-          liftIO $ print ast
-        Debug ->
-          void $ parse code >>= codegen mode initCodegenState
+        Ast ->
+          parse code >>= liftIO . print
+        ByteCode ->
+          parse code >>= codegen mode initCodegenState >>= liftIO . print
+        Run ->
+          parse code >>= codegen mode initCodegenState >>= execByteCode
         Asm -> do
           let byteCode = asm (T.lines code)
-          liftIO $ print $ "Bytecode: " <> byteCode
-          liftIO $ T.putStrLn =<< execByteCode byteCode
+          liftIO (execByteCode byteCode)
         Disasm -> do
           parse code >>= codegen mode initCodegenState >>= liftIO . T.writeFile "yis"
           (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
