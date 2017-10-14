@@ -1,13 +1,4 @@
 char a;
 a = 'y';
--- char b;
--- char c;
--- char d;
--- char e;
--- int k;
--- a = 'y';
--- b = 'i';
--- c = 'g';
--- d = 'i';
--- e = 't';
--- k = 4;
+char b;
+b = 'w';

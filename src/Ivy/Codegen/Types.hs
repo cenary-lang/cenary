@@ -142,8 +142,10 @@ updateMemPointer
   -> Integer    -- Index of the block
   -> Integer    -- New allocated size
   -> Evm ()
-updateMemPointer size index newAllocSize =
-  void $ M.alter alter' size <$> use memPointers
+updateMemPointer size index newAllocSize = do
+  memptrs <- use memPointers
+  logInfo $ T.pack $ show $ memptrs
+  memPointers %= M.alter alter' size
   where
     alter' :: Maybe MemBlock -> Maybe MemBlock
     alter' Nothing =
@@ -163,7 +165,7 @@ alloc size = do
           newPtr :: Integer = (alloc + sizeInt size)
         in do
           updateMemPointer size index newPtr
-          return (calcAddr index newPtr)
+          return (calcAddr index alloc)
       else do
           (newIndex, allocLoc) <- findMemspace size
           let newPtr = allocLoc + sizeInt size

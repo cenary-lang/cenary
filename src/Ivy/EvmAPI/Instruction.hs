@@ -6,6 +6,7 @@ module Ivy.EvmAPI.Instruction where
 import           Control.Arrow
 import           Control.Applicative
 import           Control.Monad.Except
+import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Lens hiding (op)
 import           Control.Monad.State
 import           Control.Monad.Writer
@@ -81,18 +82,29 @@ load
   -> Address
   -> Evm ()
 load size addr = do
+  op2 PUSH32 (0x10 ^ (64 - 2 * (sizeInt size)))
+  logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
   op2 PUSH32 addr
   op MLOAD
-  op2 PUSH32 (0x10 ^ (32 - 8))
   op DIV
 
-store
+storeAddressed
   :: Size    -- Variable size
   -> Integer -- Address of the value. Value should be loaded from this address
   -> Integer -- Address to put value on
   -> Evm ()
-store size valAddr destAddr = do
+storeAddressed size valAddr destAddr = do
   load size valAddr
+  op2 PUSH32 destAddr
+  op MSTORE8
+
+storeVal
+  :: Size    -- Variable size
+  -> Integer -- Address of the value. Value should be loaded from this address
+  -> Integer -- Address to put value on
+  -> Evm ()
+storeVal size val destAddr = do
+  op2 PUSH32 val
   op2 PUSH32 destAddr
   op MSTORE8
 

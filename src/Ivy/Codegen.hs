@@ -110,7 +110,7 @@ codegenTop (Assignment name val) = do
       -- op MLOAD
       newAddr <- alloc (sizeof tyR)
       -- op2 PUSH32 newAddr
-      store (sizeof tyR) addr newAddr
+      storeAddressed (sizeof tyR) addr newAddr
       assign tyL name newAddr
       return Nothing
     Def tyL _ oldAddr -> do
@@ -118,7 +118,7 @@ codegenTop (Assignment name val) = do
       -- op2 PUSH32 addr
       -- op MLOAD
       -- op2 PUSH32 oldAddr
-      store (sizeof tyL) addr oldAddr
+      storeAddressed (sizeof tyL) addr oldAddr
       assign tyL name oldAddr
       return Nothing
 
@@ -156,12 +156,12 @@ codegenTop (Identifier name) = do
 
 codegenTop (IntExpr val) = do
   addr <- alloc (sizeof IntT)
-  store (sizeof IntT) val addr
+  storeVal (sizeof IntT) val addr
   return (Just (Operand IntT addr))
 
 codegenTop (CharExpr val) = do
   addr <- alloc (sizeof CharT)
-  store (sizeof CharT) (fromIntegral (ord val)) addr
+  storeVal (sizeof CharT) (fromIntegral (ord val)) addr
   return (Just (Operand CharT addr))
 
 codegenTop (BinaryOp op expr1 expr2) = do
