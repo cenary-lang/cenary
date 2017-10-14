@@ -106,19 +106,13 @@ codegenTop (Assignment name val) = do
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl tyL _ -> do
       checkTyEq name tyL tyR
-      -- op2 PUSH32 addr
-      -- op MLOAD
-      newAddr <- alloc (sizeof tyR)
-      -- op2 PUSH32 newAddr
-      storeAddressed (sizeof tyR) addr newAddr
-      assign tyL name newAddr
+      -- newAddr <- alloc (sizeof tyR)
+      -- storeAddressed (sizeof tyR) addr newAddr
+      assign tyL name addr
       return Nothing
     Def tyL _ oldAddr -> do
       checkTyEq name tyL tyR
-      -- op2 PUSH32 addr
-      -- op MLOAD
-      -- op2 PUSH32 oldAddr
-      storeAddressed (sizeof tyL) addr oldAddr
+      -- storeAddressed (sizeof tyL) addr oldAddr
       assign tyL name oldAddr
       return Nothing
 

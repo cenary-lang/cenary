@@ -1,10 +1,2 @@
-int m;
-m = 5;
-int n;
-n = 6;
-int c;
-c = m + n;
-char r;
-r = 'y';
-int d;
-d = m + c;
+int k;
+k = 5;
