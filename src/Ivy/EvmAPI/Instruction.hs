@@ -35,6 +35,7 @@ data Instruction =
   | PUSH2
   | PUSH32
   | DUP1
+  | DUP2
   | SWAP1
   | SWAP2
   | LOG0
@@ -60,6 +61,7 @@ toInstrCode PUSH1 = 0x60
 toInstrCode PUSH2 = 0x61
 toInstrCode PUSH32 = 0x7f
 toInstrCode DUP1 = 0x80
+toInstrCode DUP2 = 0x81
 toInstrCode SWAP1 = 0x90
 toInstrCode SWAP2 = 0x91
 toInstrCode LOG0 = 0xA0
@@ -82,11 +84,75 @@ load
   -> Address
   -> Evm ()
 load size addr = do
-  op2 PUSH32 (0x10 ^ (64 - 2 * (sizeInt size)))
+  op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
   logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
   op2 PUSH32 addr
   op MLOAD
   op DIV
+
+{-|
+Given the size and necessary stack state, stores that much byte properly aligned.
+For instance, we want to store 2 bytes of data at 0x0000, so we have the following stack:
+
+00000000
+327024A6
+
+And the iterative process:
+
+00000003
+327024A6
+
+-> MSTORE8
+
+00000002
+00327024
+
+-> MSTORE8
+
+00000001
+00003270
+
+-> MSTORE8
+
+00000000
+00000032
+
+-> MSTORE8
+
+-> EXIT
+
+-}
+storeMultibyte
+  :: Size
+  -> Evm ()
+storeMultibyte size = do
+  op2 PUSH32 (sizeInt size - 1)
+  op ADD
+  replicateM_ (fromIntegral (sizeInt size)) $ do
+    -- Populate value and address for the next iteration
+    op DUP2
+    op DUP2
+
+    -- Actually store the value
+    op MSTORE8
+
+    -- Decrease position by one to go left one position
+    op2 PUSH32 0x01
+    op SWAP1
+    op SUB
+
+    -- Shift number 8 bits right
+    op2 PUSH32 0x100
+    op SWAP1
+    op SWAP2
+    op DIV
+
+    -- Swap to restore stack position which is like (address, value) instead of (value, address)
+    op SWAP1
+
+  -- Cleanup
+  op POP
+  op POP
 
 storeAddressed
   :: Size    -- Variable size
@@ -94,33 +160,34 @@ storeAddressed
   -> Integer -- Address to put value on
   -> Evm ()
 storeAddressed size valAddr destAddr = do
+  -- Initial state
   load size valAddr
   op2 PUSH32 destAddr
-  op MSTORE8
+  
+  storeMultibyte size
 
 storeVal
   :: Size    -- Variable size
-  -> Integer -- Address of the value. Value should be loaded from this address
+  -> Integer -- Actual value
   -> Integer -- Address to put value on
   -> Evm ()
 storeVal size val destAddr = do
+  let endDest = sizeInt size + destAddr - 1 -- To store 8 byte on address 10, we start from 17 and go back to 10
   op2 PUSH32 val
-  op2 PUSH32 destAddr
+  op2 PUSH32 endDest
   op MSTORE8
-
--- store :: Size -> Evm ()
--- store Size_1 = op MSTORE8
--- store Size_32 = op MSTORE
--- store other = throwError $ InternalError $ "Cannot store " <> show other <> " bytes, it's not implemented."
+  forM_ [1..sizeInt size - 1] $ \i -> do
+    op2 PUSH32 (val `div` (0x100 ^ i))
+    op2 PUSH32 (endDest - i)
+    op MSTORE8
 
 binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do
-  op2 PUSH32 left
-  op MLOAD
-  op2 PUSH32 right
-  op MLOAD
+  load (sizeof S.IntT) left
+  load (sizeof S.IntT) right
   op instr
   addr <- alloc (sizeof S.IntT)
+  logInfo $ "Address: " <> T.pack (show addr)
   op2 PUSH32 addr
-  op MSTORE
+  storeMultibyte (sizeof S.IntT)
   return (Just (Operand t addr))

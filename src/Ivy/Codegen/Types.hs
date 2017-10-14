@@ -15,6 +15,7 @@ import           Control.Monad.Logger           hiding (logInfo)
 import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Monad.State
 import           Data.Functor.Identity
+import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Semigroup                 ((<>))
 import qualified Data.Text                      as T
@@ -89,16 +90,13 @@ data CodegenState = CodegenState
 
 makeLenses ''CodegenState
 
-initMemBlock :: MemBlock
-initMemBlock = MemBlock 0 0
-
 initMemPointers :: MemPointers
 initMemPointers = M.fromList
-  [ (Size_1, initMemBlock)
-  , (Size_2, initMemBlock)
-  , (Size_4, initMemBlock)
-  , (Size_8, initMemBlock)
-  , (Size_32, initMemBlock)
+  [ (Size_1, MemBlock 0 0)
+  , (Size_2, MemBlock 1 0)
+  , (Size_4, MemBlock 2 0)
+  , (Size_8, MemBlock 3 0)
+  , (Size_32, MemBlock 4 0)
   ]
 
 newtype Evm a = Evm { runEvm :: StateT CodegenState (LoggingT (ExceptT CodegenError IO)) a }
@@ -117,20 +115,19 @@ totalMemBlockSize = 32 -- There are 32 bytes in a block
 
 -- O(n)
 findMemspace
-  :: Size  -- Required size of allocation
-  -> Evm (Integer, Integer) -- (newIndex, allocLoc)
-findMemspace size = do
+  :: Evm Integer -- newIndex
+findMemspace = do
   mem <- use memory
   let msize = fromIntegral $ M.size mem
   case go (M.assocs mem) of
-    Nothing     -> (memory %= M.insert msize (0 :: Integer)) >> return (msize, 0 :: Integer)
+    Nothing     -> (memory %= M.insert msize (0 :: Integer)) $> msize
     Just result -> return result
     where
-      go :: [(Integer, Integer)] -> Maybe (Integer, Integer)
+      go :: [(Integer, Integer)] -> Maybe Integer
       go [] = Nothing
       go ((index, alloc):xs) =
-        if totalMemBlockSize - alloc > sizeInt size
-           then Just (index, alloc + sizeInt size)
+        if alloc == 0
+           then Just index
            else go xs
 
 calcAddr :: Integer -> Integer -> Integer
@@ -138,13 +135,11 @@ calcAddr index allocLen = index * totalMemBlockSize + allocLen
 
 -- O(logn)
 updateMemPointer
-  :: Size   -- Location where allocation shall start inside block
+  :: Size       -- Which mem pointer will be updated
   -> Integer    -- Index of the block
   -> Integer    -- New allocated size
   -> Evm ()
-updateMemPointer size index newAllocSize = do
-  memptrs <- use memPointers
-  logInfo $ T.pack $ show $ memptrs
+updateMemPointer size index newAllocSize =
   memPointers %= M.alter alter' size
   where
     alter' :: Maybe MemBlock -> Maybe MemBlock
@@ -152,6 +147,9 @@ updateMemPointer size index newAllocSize = do
       error $ "Pointer does not exist for size: " <> show size
     alter' (Just (MemBlock old_index old_alloc)) =
       Just (MemBlock index newAllocSize)
+
+markMemAlloc :: Integer -> Integer -> Evm ()
+markMemAlloc index alloc = memory %= M.alter (const (Just alloc)) index
 
 alloc :: Size -> Evm Integer
 alloc size = do
@@ -162,15 +160,20 @@ alloc size = do
       if totalMemBlockSize - alloc >= sizeInt size
         then
         let
-          newPtr :: Integer = (alloc + sizeInt size)
+          newPos :: Integer = (alloc + sizeInt size)
         in do
-          updateMemPointer size index newPtr
-          return (calcAddr index alloc)
+          updateMemPointer size index newPos
+          let baseAddr = calcAddr index alloc
+          let targetAddr = calcAddr index newPos
+          markMemAlloc index targetAddr
+          return baseAddr
       else do
-          (newIndex, allocLoc) <- findMemspace size
-          let newPtr = allocLoc + sizeInt size
-          updateMemPointer size newIndex newPtr
-          return (calcAddr newIndex newPtr)
+          newIndex <- findMemspace
+          let baseAddr = 0
+          let targetAddr = sizeInt size
+          updateMemPointer size newIndex targetAddr
+          markMemAlloc newIndex targetAddr
+          return (calcAddr newIndex baseAddr)
 
 allocBulk
   :: Integer
