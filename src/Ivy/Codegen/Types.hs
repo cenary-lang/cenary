@@ -9,7 +9,7 @@ module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
 import           Control.Arrow
-import           Control.Lens
+import           Control.Lens                   hiding (Context)
 import           Control.Monad.Except
 import           Control.Monad.Logger           hiding (logInfo)
 import           Control.Monad.Logger.CallStack (logInfo)
@@ -69,7 +69,8 @@ sizeInt Size_8 = 8
 sizeInt Size_32 = 32
 
 type Address = Integer
-type SymbolTable = M.Map String (PrimType, Maybe Address)
+type Env = [Context] -- A stack
+type Context = M.Map String (PrimType, Maybe Address)
 
 data MemBlock = MemBlock
   { _memBlockIndex     :: Integer
@@ -83,8 +84,7 @@ type MemPointers = M.Map Size MemBlock
 data CodegenState = CodegenState
   { _byteCode    :: !T.Text
   , _memPointers :: !MemPointers
-  , _globalScope :: !SymbolTable
-  , _localScope  :: !SymbolTable
+  , _env         :: !Env
   , _memory      :: !(M.Map Integer Integer)
   }
 
@@ -104,10 +104,9 @@ newtype Evm a = Evm { runEvm :: StateT CodegenState (LoggingT (ExceptT CodegenEr
 
 type ScopeLevel = Int
 
-data Scope = Local | Global
 data VariableStatus = NotDeclared
-                    | Decl PrimType Scope
-                    | Def PrimType Scope Integer
+                    | Decl PrimType
+                    | Def PrimType Integer
                     | Error CodegenError
 
 totalMemBlockSize :: Integer
@@ -204,7 +203,6 @@ initCodegenState :: CodegenState
 initCodegenState = CodegenState
   { _byteCode   = ""
   , _memPointers = initMemPointers
-  , _globalScope = M.empty
-  , _localScope = M.empty
   , _memory     = M.empty
+  , _env        = [M.empty]
   }
