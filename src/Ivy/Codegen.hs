@@ -35,15 +35,16 @@ updateCtx f =
   env %= (\(ctx:xs) -> (f ctx:xs))
 
 assign :: PrimType -> Name -> Integer -> Evm ()
-assign ty name addr = do
+assign tyR name addr = do
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name)
-    Decl ty2 -> do
-      checkTyEq name ty ty2
-      updateCtx (M.update (const (Just (ty, Just addr))) name)
-    Def ty2 oldAddr -> do
-      checkTyEq name ty ty2
-      updateCtx (M.update (const (Just (ty, Just addr))) name)
+    Decl tyL -> do
+      checkTyEq name tyL tyR
+      updateCtx (M.update (const (Just (tyL, Just addr))) name)
+    Def tyL oldAddr -> do
+      checkTyEq name tyL tyR
+      storeAddressed (sizeof tyL) addr oldAddr
+      updateCtx (M.update (const (Just (tyL, Just addr))) name)
 
 lookup :: String -> Evm VariableStatus
 lookup name = do
@@ -110,19 +111,8 @@ codegenTop (Times until block) = do
 
 codegenTop (Assignment name val) = do
   Operand tyR addr <- codegenTopOperand val
-  lookup name >>= \case
-    NotDeclared -> throwError $ VariableNotDeclared name
-    Decl tyL -> do
-      checkTyEq name tyL tyR
-      -- newAddr <- alloc (sizeof tyR)
-      -- storeAddressed (sizeof tyR) addr newAddr
-      assign tyL name addr
-      return Nothing
-    Def tyL oldAddr -> do
-      checkTyEq name tyL tyR
-      -- storeAddressed (sizeof tyL) addr oldAddr
-      assign tyL name addr
-      return Nothing
+  assign tyR name addr
+  return Nothing
 
 codegenTop (ArrAssignment name index val) = do
   Operand tyR addr <- codegenTopOperand val
@@ -197,11 +187,10 @@ log :: Show a => T.Text -> a -> Evm ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 
 codegenTop' :: Expr -> Evm (Maybe Operand)
-codegenTop' expr =
-  -- log "Expr" expr
+codegenTop' expr = do
+  log "Expr" expr
   -- use byteCode >>= log "ByteCode"
-  -- use localScope >>= log "LocalScope"
-  -- use globalScope >>= log "GlobalScope"
+  use env >>= log "env"
   -- use memory >>= log "Memory"
   -- use memPointers >>= log "MemPointers"
   codegenTop expr

@@ -1,6 +1,9 @@
 int i;
 i = 2;
-i = i + 1;
-i = i + 1;
-i = i + 1;
-i = i + 1;
+int j;
+j = 0;
+5.times do
+  i = i + 1;
+  j = j + 2;
+endtimes;
+j = j + 7;

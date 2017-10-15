@@ -52,6 +52,12 @@ instance Show CodegenError where
                                               <> " while in local scope it has "
                                               <> show local
   show (InternalError err) = "InternalError: " <> err
+  show (WrongOperandTypes tyL tyR) = "Wrong operand types: "
+                                   <> "Expected a value of "
+                                   <> show tyL
+                                   <> " but a value of type "
+                                   <> show tyR
+                                   <> " is provided."
 
 data Size =
     Size_1
