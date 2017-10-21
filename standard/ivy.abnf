@@ -1,0 +1,68 @@
+; ABNF Syntax for ivy, a programming language for ethereum virtual machine
+; based on RFC 5234 (https://tools.ietf.org/html/rfc5234).
+
+equal          = "="  whitespace
+plus           = "+"  whitespace
+minus          = "-"  whitespace
+times          = "*"  whitespace
+div            = "/"  whitespace
+line-comment   = "--" whitespace
+single-quote   = "'"  whitespace
+opening-bracket = "["
+closing-bracket = "]"
+
+operator =
+    plus
+  / minus
+  / times
+  / div
+
+tab = %x09 ; \t
+
+ALPHA =
+    %x41-5A ; [A-Z]
+  / %x61-7A ; [a-z]
+
+DIGIT = %x30-39 ; ASCII 0-9
+
+ALPHANUM = *(ALPHA / DIGIT)
+
+
+single-whitespace =
+    " "
+  / tab
+whitespace = *single-whitespace
+
+intType = %x69.6E.74 ; int
+
+charType = %x63.68.61.72 ; char
+
+primType = intType / charType
+
+arr-type = primType opening-bracket integer closing-bracket
+
+type =
+    primType
+  / arr-type
+
+timesBegin = %x74.69.6D.65.73 ; times
+timesEnd = %x65.6E.64 timesBegin ; endtimes
+
+integer       = *DIGIT
+char          = single-quote ALPHANUM single-quote
+identifier    = *ALPHA
+var-decl      = type identifier whitespace equal whitespace expr
+assignment    = identifier whitespace equal
+arrAssignment = identifier opening-bracket integer closing-bracket whitespace equal expr
+binop         = expr whitespace operator expr
+timesExpr     = integer "." timesBegin expr timesEnd
+
+expr =
+    integer
+  / char
+  / identifier
+  / var-decl
+  / assignment
+  / arrAssignment
+  / binop
+  / timesExpr
