@@ -35,7 +35,8 @@ executable ivy
     parsec-numbers,
     process,
     text,
-    TypeCompose
+    TypeCompose,
+    pretty-simple
   other-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,

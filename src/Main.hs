@@ -15,6 +15,7 @@ import           System.Environment
 import           System.Process
 import           System.IO            (hClose)
 import           Text.Parsec          (ParseError)
+import           Text.Pretty.Simple   (pPrint)
 ------------------------------------------------------
 import qualified Ivy.Codegen         as C
 import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
@@ -68,8 +69,10 @@ main = do
     go :: T.Text -> Mode -> ExceptT Error IO ()
     go code mode = 
       case mode of
-        Ast ->
-          parse code >>= liftIO . print
+        Ast -> do
+          ast <- parse code
+          liftIO $ print ast
+          liftIO $ pPrint ast
         ByteCode ->
           parse code >>= codegen mode initCodegenState >>= liftIO . print
         Run ->
