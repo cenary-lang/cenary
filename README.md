@@ -1,4 +1,4 @@
-# evm-l
+# Ivy
 
 A Language and its compiler on Ethereum Virtual Machine
 

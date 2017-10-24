@@ -2,3 +2,9 @@
 cabal.sandbox.config
 .stack-work
 dist
+
+# Tex files
+*.aux
+*.log
+*.synctex.gz
+*.toc

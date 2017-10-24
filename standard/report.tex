@@ -1,0 +1,62 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\graphicspath{ {images/} }
+
+\title{Cmpe491 Midterm Progress Report}
+\author{Yiğit Özkavcı}
+\date{October 2017}
+
+\begin{document}
+
+
+\maketitle
+
+\tableofcontents
+
+\newpage
+
+\section{Introduction}
+\par 
+\par This is the midterm report for project Ivy, a programming language for writing smart contracts on Ethereum Virtual Machine.
+\par Ethereum is a decentralized plaform that runs smart contracts: pieces of codes that have the ability to run on any blockchain network. In order to write smart contracts, one should deploy a EVM-executable bytecode into blockchain network, which is not practical since bytecode is a sequence of hex characters; nothing more. To overcome this problem, EVM-compatible programming languages are being designed in order to abstract the problem of having to deploy plain bytecode. 
+\par There are already programming languages targeting EVM, including Solidity\cite{solidity}, Bamboo\cite{bamboo} and Viper\cite{viper}. 
+
+\section{Concerns on EVM}
+Designing a programming language while targeting EVM has several problems that general purpose programming languages don't. In this section, we will investigate problems that we have / may encounter.
+
+\subsection{Gas Cost}
+\par Gas is the pricing of computations that are run by smart contracts. Basically, each interaction via a smart contract must be paid in units of gas. This also means that the higher abstraction level we have for EVM computations, the more costly our computations will be, because of the abstraction layer switch of the compiler.
+\par This is where compiler optimizations are critically important. In the context of smart contracts, compiler optimization is not just about how much of the RAM or CPU of the user you consume, but also the real money of the user you waste in the runtime. We will investigate optimisations in terms of stack operations (see \ref{subsec:stack}) and memory allocations (see \ref{subsec:memory}) in further sections.
+
+\subsection{Entrance Point}
+\par A smart contract has two main phases in its life time:
+\begin{enumerate}
+  \item
+    \textbf{Construction}
+    \par When a smart contract is deployed on EVM, a code is being executed in the same fashion Java\cite{java} constructs instances of objects described in their class.
+  \item
+    \textbf{Code to execute upon receiving a message}
+\end{enumerate}
+
+\section{Optimisations}
+\subsection{Stack}
+\label{subsec:stack}
+\subsection{Memory}
+\label{subsec:memory}
+\section{Syntax}
+
+\begin{thebibliography}{9}
+
+\bibitem{solidity}
+  Solidity: Contract-Oriented Programming Language, \url{https://github.com/ethereum/solidity}
+\bibitem{bamboo}
+  Bamboo: a morphing smart contract language, \url{https://github.com/pirapira/bamboo}
+\bibitem{viper}
+  Viper: an experimental programming language targeting EVM, \url{https://github.com/ethereum/viper}
+\bibitem{java}
+  \url{https://en.wikipedia.org/wiki/Java\_(programming\_language)}
+
+\end{thebibliography}
+
+\end{document}
