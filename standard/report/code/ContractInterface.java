@@ -1,3 +1,5 @@
+// code/ContractInterface.java
+
 /*
  * An abstract address representation
  */
