@@ -1,14 +1,17 @@
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Ivy.Codegen.Memory where
 
 --------------------------------------------------------------------------------
-import           Control.Lens           hiding (op)
+import           Control.Lens                   hiding (op)
 import           Control.Monad
 import           Control.Monad.Except
-import           Data.Functor           (($>))
-import qualified Data.Map               as M
+import           Control.Monad.Logger.CallStack (logInfo)
+import           Data.Functor                   (($>))
+import qualified Data.Map                       as M
 import           Data.Monoid
+import qualified Data.Text                      as T
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
@@ -139,3 +142,85 @@ initMemPointers = M.fromList
   , (Size_8, MemBlock 3 0)
   , (Size_32, MemBlock 4 0)
   ]
+
+load
+  :: Size
+  -> Address
+  -> Evm ()
+load size addr = do
+  op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
+  logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
+  op2 PUSH32 addr
+  op MLOAD
+  op DIV
+
+{-|
+Given the size and necessary stack state, stores that much byte properly aligned.
+For instance, we want to store 2 bytes of data at 0x0000, so we have the following stack:
+
+00000000
+327024A6
+
+And the iterative process:
+
+00000003
+327024A6
+
+-> MSTORE8
+
+00000002
+00327024
+
+-> MSTORE8
+
+00000001
+00003270
+
+-> MSTORE8
+
+00000000
+00000032
+
+-> MSTORE8
+
+-> EXIT
+
+-}
+storeMultibyte
+  :: Size
+  -> Evm ()
+storeMultibyte size = do
+  op2 PUSH32 (sizeInt size - 1)
+  op ADD
+  replicateM_ (fromIntegral (sizeInt size)) $ do
+    -- Populate value and address for the next iteration
+    op DUP2
+    op DUP2
+
+    -- Actually store the value
+    op MSTORE8
+
+    -- Decrease position by one to go left one position
+    op2 PUSH32 0x01
+    op SWAP1
+    op SUB
+
+    -- Shift number 8 bits right
+    op2 PUSH32 0x100
+    op SWAP1
+    op SWAP2
+    op DIV
+
+    -- Swap to restore stack position which is like (address, value) instead of (value, address)
+    op SWAP1
+
+  -- Cleanup
+  op POP
+  op POP
+
+sizeInt :: Size -> Integer
+sizeInt Size_1 = 1
+sizeInt Size_2 = 2
+sizeInt Size_4 = 4
+sizeInt Size_8 = 8
+sizeInt Size_32 = 32

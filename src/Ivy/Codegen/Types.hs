@@ -67,13 +67,6 @@ data Size =
   | Size_32
   deriving (Show, Eq, Ord)
 
-sizeInt :: Size -> Integer
-sizeInt Size_1 = 1
-sizeInt Size_2 = 2
-sizeInt Size_4 = 4
-sizeInt Size_8 = 8
-sizeInt Size_32 = 32
-
 type Address = Integer
 type Env = [Context] -- A stack
 type Context = M.Map String (PrimType, Maybe Address)
