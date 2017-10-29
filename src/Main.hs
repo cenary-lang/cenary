@@ -18,7 +18,7 @@ import           Text.Parsec          (ParseError)
 import           Text.Pretty.Simple   (pPrint)
 ------------------------------------------------------
 import qualified Ivy.Codegen         as C
-import           Ivy.Codegen.Types   (CodegenState (..), initCodegenState,
+import           Ivy.Codegen.Types   (CodegenState (..),
                                        runEvm, CodegenError(..))
 import qualified Ivy.Parser          as P
 import qualified Ivy.Syntax          as S
@@ -74,14 +74,14 @@ main = do
           liftIO $ print ast
           liftIO $ pPrint ast
         ByteCode ->
-          parse code >>= codegen mode initCodegenState >>= liftIO . print
+          parse code >>= codegen mode C.initCodegenState >>= liftIO . print
         Run ->
-          parse code >>= codegen mode initCodegenState >>= execByteCode
+          parse code >>= codegen mode C.initCodegenState >>= execByteCode
         Asm -> do
           let byteCode = asm (T.lines code)
           liftIO (execByteCode byteCode)
         Disasm -> do
-          parse code >>= codegen mode initCodegenState >>= liftIO . T.writeFile "yis"
+          parse code >>= codegen mode C.initCodegenState >>= liftIO . T.writeFile "yis"
           (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
           liftIO $ do
             T.putStrLn =<< hGetContents hout

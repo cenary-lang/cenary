@@ -1,25 +1,47 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
-import           Control.Lens                   hiding (op, assign, Context)
 import           Control.Applicative
+import           Control.Lens                   hiding (Context, assign, op)
 import           Control.Monad.Except
-import           Control.Monad.Logger.CallStack (logInfo, logDebug, logWarn)
+import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State
 import           Data.Char                      (ord)
+import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
-import qualified Data.Text                      as T
 import           Data.Monoid                    ((<>))
-import           Prelude hiding                 (lookup, log)
+import qualified Data.Text                      as T
+import           Prelude                        hiding (log, lookup)
 --------------------------------------------------------------------------------
-import           Ivy.EvmAPI.Instruction
+import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
+import           Ivy.EvmAPI.Instruction
 import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
+
+binOp :: PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
+binOp t instr left right = do
+  load (sizeof TInt) left
+  load (sizeof TInt) right
+  op instr
+  addr <- alloc (sizeof TInt)
+  logInfo $ "Address: " <> T.pack (show addr)
+  op2 PUSH32 addr
+  storeMultibyte (sizeof TInt)
+  return (Just (Operand t addr))
+
+initCodegenState :: CodegenState
+initCodegenState = CodegenState
+  { _byteCode   = ""
+  , _memPointers = initMemPointers
+  , _memory     = M.empty
+  , _env        = [M.empty]
+  }
 
 executeBlock :: Block -> Evm ()
 executeBlock (Block bodyExpr) = do
@@ -54,9 +76,9 @@ lookup name = do
     go [] = return NotDeclared
     go (ctx:xs) =
       case M.lookup name ctx of
-        Just (ty, Nothing) -> return (Decl ty)
+        Just (ty, Nothing)   -> return (Decl ty)
         Just (ty, Just addr) -> return (Def ty addr)
-        Nothing -> go xs
+        Nothing              -> go xs
 
     decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
     decide Nothing                   Nothing                = return NotDeclared
@@ -133,7 +155,7 @@ codegenTop (EVarDecl ty name) = do
     NotDeclared -> do
       mb_addr <- case ty of
           TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
-          _              -> return Nothing
+          _                 -> return Nothing
       updateCtx (M.insert name (ty, mb_addr))
   return Nothing
 
