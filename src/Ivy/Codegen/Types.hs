@@ -201,8 +201,8 @@ allocBulk length size = do
       updateInc size length allocated = updateInc size (length - 1) (allocated + sizeInt size)
 
 sizeof :: PrimType -> Size
-sizeof IntT = Size_8
-sizeof CharT = Size_1
+sizeof TInt = Size_8
+sizeof TChar = Size_1
 sizeof other = error $ "`sizeof` is not implemented for type " <> show other
 
 initCodegenState :: CodegenState

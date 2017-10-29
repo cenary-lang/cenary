@@ -16,20 +16,20 @@ type Length = Integer
 type Index = Integer
 
 data PrimType =
-    IntT
-  | CharT
-  | Array Length PrimType
+    TInt
+  | TChar
+  | TArray Length PrimType
   deriving (Eq, Show)
 
 data Expr =
-    IntExpr Integer
-  | CharExpr Char
-  | Identifier Name
-  | VarDecl PrimType Name
-  | Assignment Name Expr
-  | DeclAndAssignment PrimType Name Expr
-  | ArrAssignment Name Index Expr
-  | BinaryOp Op Expr Expr
-  | Times Integer Block
-  | Debug Expr
+    EInt Integer
+  | EChar Char
+  | EIdentifier Name
+  | EVarDecl PrimType Name
+  | EAssignment Name Expr
+  | EDeclAndAssignment PrimType Name Expr
+  | EArrAssignment Name Index Expr
+  | EBinop Op Expr Expr
+  | ETimes Integer Block
+  | EDebug Expr
   deriving Show

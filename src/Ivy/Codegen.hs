@@ -80,7 +80,7 @@ checkTyEq name tyL tyR =
   unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
 codegenTop :: Expr -> Evm (Maybe Operand)
-codegenTop (Times until block) = do
+codegenTop (ETimes until block) = do
   -- Assign target value
   op2 PUSH32 until
   op JUMPDEST
@@ -106,17 +106,17 @@ codegenTop (Times until block) = do
 
   return Nothing
 
-codegenTop (Assignment name val) = do
+codegenTop (EAssignment name val) = do
   Operand tyR addr <- codegenTopOperand val
   assign tyR name addr
   return Nothing
 
-codegenTop (ArrAssignment name index val) = do
+codegenTop (EArrAssignment name index val) = do
   Operand tyR addr <- codegenTopOperand val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl _tyL -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
-    Def (Array _size aTy) oldAddr -> do
+    Def (TArray _size aTy) oldAddr -> do
       checkTyEq name aTy tyR
       op2 PUSH32 (addr + sizeInt (sizeof aTy) * index)
       op MLOAD
@@ -126,51 +126,51 @@ codegenTop (ArrAssignment name index val) = do
       return Nothing
     Def other _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 
-codegenTop (VarDecl ty name) = do
+codegenTop (EVarDecl ty name) = do
   lookup name >>= \case
     Decl _ -> throwError (VariableAlreadyDeclared name)
     Def _ _ -> throwError (VariableAlreadyDeclared name)
     NotDeclared -> do
       mb_addr <- case ty of
-          Array length aTy -> Just <$> allocBulk length (sizeof aTy)
+          TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
           _              -> return Nothing
       updateCtx (M.insert name (ty, mb_addr))
   return Nothing
 
-codegenTop (DeclAndAssignment ty name val) = do
-  codegenTop (VarDecl ty name)
-  codegenTop (Assignment name val)
+codegenTop (EDeclAndAssignment ty name val) = do
+  codegenTop (EVarDecl ty name)
+  codegenTop (EAssignment name val)
   return Nothing
 
-codegenTop (Identifier name) = do
+codegenTop (EIdentifier name) = do
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name)
     Decl _ -> throwError (VariableNotDefined name)
     Def ty addr -> return (Just (Operand ty addr))
 
-codegenTop (IntExpr val) = do
-  addr <- alloc (sizeof IntT)
-  storeVal (sizeof IntT) val addr
-  return (Just (Operand IntT addr))
+codegenTop (EInt val) = do
+  addr <- alloc (sizeof TInt)
+  storeVal (sizeof TInt) val addr
+  return (Just (Operand TInt addr))
 
-codegenTop (CharExpr val) = do
-  addr <- alloc (sizeof CharT)
-  storeVal (sizeof CharT) (fromIntegral (ord val)) addr
-  return (Just (Operand CharT addr))
+codegenTop (EChar val) = do
+  addr <- alloc (sizeof TChar)
+  storeVal (sizeof TChar) (fromIntegral (ord val)) addr
+  return (Just (Operand TChar addr))
 
-codegenTop (BinaryOp op expr1 expr2) = do
+codegenTop (EBinop op expr1 expr2) = do
   Operand ty1 left <- codegenTopOperand expr1
   Operand ty2 right <- codegenTopOperand expr2
   case (ty1, ty2) of
-    (IntT, IntT) ->
+    (TInt, TInt) ->
       case op of
-        OpAdd -> binOp IntT ADD left right
-        OpMul -> binOp IntT MUL left right
-        OpSub -> binOp IntT SUB left right
-        OpDiv -> binOp IntT DIV left right
+        OpAdd -> binOp TInt ADD left right
+        OpMul -> binOp TInt MUL left right
+        OpSub -> binOp TInt SUB left right
+        OpDiv -> binOp TInt DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
-codegenTop (Debug expr) = do
+codegenTop (EDebug expr) = do
   Operand _ty addr <- codegenTopOperand expr
   op2 PUSH32 addr
   op MLOAD

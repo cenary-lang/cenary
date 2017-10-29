@@ -42,6 +42,7 @@ data Instruction =
   | LOG1
   | LOG2
   | RETURN
+  | ADDRESS
 
 toInstrCode :: Instruction -> Integer
 toInstrCode STOP = 0x00
@@ -68,6 +69,7 @@ toInstrCode LOG0 = 0xA0
 toInstrCode LOG1 = 0xA1
 toInstrCode LOG2 = 0xA2
 toInstrCode RETURN = 0xf3
+toInstrCode ADDRESS = 0x30
 
 addBC :: Integer -> Evm ()
 addBC val = byteCode <>= T.pack (printf "%064x" val)
@@ -183,11 +185,11 @@ storeVal size val destAddr = do
 
 binOp :: S.PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
 binOp t instr left right = do
-  load (sizeof S.IntT) left
-  load (sizeof S.IntT) right
+  load (sizeof S.TInt) left
+  load (sizeof S.TInt) right
   op instr
-  addr <- alloc (sizeof S.IntT)
+  addr <- alloc (sizeof S.TInt)
   logInfo $ "Address: " <> T.pack (show addr)
   op2 PUSH32 addr
-  storeMultibyte (sizeof S.IntT)
+  storeMultibyte (sizeof S.TInt)
   return (Just (Operand t addr))

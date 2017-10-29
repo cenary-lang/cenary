@@ -24,17 +24,17 @@ text input = T.pack <$> string (T.unpack input)
 primChar :: Parser Expr
 primChar = do
   c <- charLiteral
-  return (CharExpr c)
+  return (EChar c)
 
 prims :: Parser Expr
-prims = try (IntExpr <$> integer)
+prims = try (EInt <$> integer)
     <|> primChar
     <?> "primitive"
 
 term :: Parser Integer
 term = natural
 
-binary s opType = Infix (reservedOp s >> return (BinaryOp opType))
+binary s opType = Infix (reservedOp s >> return (EBinop opType))
 
 binops = [ [ binary "*" OpMul AssocLeft
            , binary "/" OpDiv AssocLeft
@@ -49,15 +49,15 @@ expr = buildExpressionParser binops factor
 
 array :: Parser PrimType
 array = do
-  type' <- try (string "int" $> IntT) <|> string "char" $> CharT
+  type' <- try (string "int" $> TInt) <|> string "char" $> TChar
   char '['
   size <- integer
   char ']'
-  return (Array size type')
+  return (TArray size type')
 
 primType :: Parser PrimType
-primType = try (string "int" $> IntT)
-       <|> string "char" $> CharT
+primType = try (string "int" $> TInt)
+       <|> string "char" $> TChar
        <?> "type declaration"
 
 varDecl :: Parser Expr
@@ -65,7 +65,7 @@ varDecl = do
   type' <- try array <|> primType
   whitespace
   name <- identifier
-  return $ VarDecl type' name
+  return $ EVarDecl type' name
   <?> "variable decleration"
 
 block :: Parser Block
@@ -79,7 +79,7 @@ timesIterationBegin = do
   reserved "do"
   body <- block
   reserved "endtimes"
-  return (Times until body)
+  return (ETimes until body)
   <?> "times iteration"
 
 assignment :: Parser Expr
@@ -87,7 +87,7 @@ assignment = do
   name <- identifier
   reserved "="
   rhs <- expr
-  return (Assignment name rhs)
+  return (EAssignment name rhs)
   <?> "assignment"
 
 arrAssignment :: Parser Expr
@@ -100,7 +100,7 @@ arrAssignment = do
   reserved "="
   whitespace
   val <- expr
-  return (ArrAssignment name index val)
+  return (EArrAssignment name index val)
   <?> "array assignment"
 
 declAndAssignment :: Parser Expr
@@ -110,7 +110,7 @@ declAndAssignment = do
   name <- identifier
   reserved "="
   rhs <- expr
-  return (DeclAndAssignment type' name rhs)
+  return (EDeclAndAssignment type' name rhs)
 
 debug :: Parser Expr
 debug = do
@@ -118,7 +118,7 @@ debug = do
   char '('
   val <- expr
   char ')'
-  return (Debug val)
+  return (EDebug val)
   <?> "debug"
 
 factor :: Parser Expr
@@ -129,7 +129,7 @@ factor = try (parens expr <?> "parens")
      <|> try varDecl
      <|> try arrAssignment
      <|> try assignment
-     <|> try (Identifier <$> identifier <?> "identifier")
+     <|> try (EIdentifier <$> identifier <?> "identifier")
      <|> debug
      <?>  "factor"
 

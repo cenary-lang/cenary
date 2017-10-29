@@ -11,8 +11,8 @@ type Length = Integer
 type Index = Integer
 
 data PrimType =
-    IntT
-  | CharT
+    TInt
+  | TChar
   | Array Length PrimType
   deriving (Eq, Show)
 
