@@ -21,9 +21,6 @@ import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
-initScopeLevel :: Int
-initScopeLevel = 0
-
 executeBlock :: Block -> Evm ()
 executeBlock (Block bodyExpr) = do
   env %= (M.empty :)
@@ -138,6 +135,11 @@ codegenTop (VarDecl ty name) = do
           Array length aTy -> Just <$> allocBulk length (sizeof aTy)
           _              -> return Nothing
       updateCtx (M.insert name (ty, mb_addr))
+  return Nothing
+
+codegenTop (DeclAndAssignment ty name val) = do
+  codegenTop (VarDecl ty name)
+  codegenTop (Assignment name val)
   return Nothing
 
 codegenTop (Identifier name) = do

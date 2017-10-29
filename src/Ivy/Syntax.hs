@@ -27,6 +27,7 @@ data Expr =
   | Identifier Name
   | VarDecl PrimType Name
   | Assignment Name Expr
+  | DeclAndAssignment PrimType Name Expr
   | ArrAssignment Name Index Expr
   | BinaryOp Op Expr Expr
   | Times Integer Block
