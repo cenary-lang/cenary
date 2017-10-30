@@ -134,17 +134,24 @@ codegenTop (EAssignment name val) = do
   return Nothing
 
 codegenTop (EArrAssignment name index val) = do
+  Operand tyI iAddr <- codegenTopOperand index
+  checkTyEq ("index_of_" <> name) TInt tyI
   Operand tyR addr <- codegenTopOperand val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl _tyL -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
-    Def (TArray _size aTy) oldAddr -> do
+    Def (TArray length aTy) oldAddr -> do
       checkTyEq name aTy tyR
-      op2 PUSH32 (addr + sizeInt (sizeof aTy) * index)
-      op MLOAD
+
+      load (sizeof aTy) addr
+
+      load (sizeof TInt) iAddr
+      op2 PUSH32 (sizeInt (sizeof aTy))
+      op MUL
       op2 PUSH32 oldAddr
-      op MSTORE
-      -- assign tyL name oldAddr
+      op ADD
+
+      storeMultibyte (sizeof aTy)
       return Nothing
     Def other _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 

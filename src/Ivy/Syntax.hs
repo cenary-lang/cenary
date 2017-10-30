@@ -13,7 +13,6 @@ data Op =
   deriving Show
 
 type Length = Integer
-type Index = Integer
 
 data PrimType =
     TInt
@@ -28,7 +27,7 @@ data Expr =
   | EVarDecl PrimType Name
   | EAssignment Name Expr
   | EDeclAndAssignment PrimType Name Expr
-  | EArrAssignment Name Index Expr
+  | EArrAssignment Name Expr Expr
   | EBinop Op Expr Expr
   | ETimes Integer Block
   | EDebug Expr

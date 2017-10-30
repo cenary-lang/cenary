@@ -94,7 +94,7 @@ arrAssignment :: Parser Expr
 arrAssignment = do
   name <- identifier
   char '['
-  index <- integer
+  index <- expr
   char ']'
   whitespace
   reserved "="

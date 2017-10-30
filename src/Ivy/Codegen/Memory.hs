@@ -114,8 +114,7 @@ allocBulk
   -> Size
   -> Evm Integer
 allocBulk length size = do
-  mem <- use memory
-  let msize = fromIntegral $ M.size mem
+  msize <- fromIntegral . M.size <$> use memory
   if sizeInt size * length <= totalMemBlockSize
      then -- There are 5 blocks of 4 bytes
        memory %= M.update (updateInc size length) msize
