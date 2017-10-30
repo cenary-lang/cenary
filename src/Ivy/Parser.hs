@@ -21,14 +21,24 @@ import           Ivy.Syntax
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text
 text input = T.pack <$> string (T.unpack input)
 
+primInt :: Parser Expr
+primInt =
+  EInt <$> integer
+
 primChar :: Parser Expr
-primChar = do
-  c <- charLiteral
-  return (EChar c)
+primChar =
+  EChar <$> charLiteral
+
+primBool :: Parser Expr
+primBool =
+  fmap EBool $
+    try (reserved "true" $> True)
+    <|> (reserved "false" $> False)
 
 prims :: Parser Expr
-prims = try (EInt <$> integer)
-    <|> primChar
+prims = try primInt
+    <|> try primChar
+    <|> primBool
     <?> "primitive"
 
 term :: Parser Integer
@@ -47,26 +57,28 @@ binops = [ [ binary "*" OpMul AssocLeft
 expr :: Parser Expr
 expr = buildExpressionParser binops factor
 
+typeAnnot :: Parser PrimType
+typeAnnot =
+  try (reserved "int" $> TInt)
+  <|> try (reserved "char" $> TChar)
+  <|> reserved "bool" $> TBool
+  <?> "type annotation"
+
 array :: Parser PrimType
 array = do
-  type' <- try (string "int" $> TInt) <|> string "char" $> TChar
+  type' <- typeAnnot
   char '['
   size <- integer
   char ']'
   return (TArray size type')
 
-primType :: Parser PrimType
-primType = try (string "int" $> TInt)
-       <|> string "char" $> TChar
-       <?> "type declaration"
-
 varDecl :: Parser Expr
 varDecl = do
-  type' <- try array <|> primType
+  type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
   return $ EVarDecl type' name
-  <?> "variable decleration"
+  <?> "variable declaration"
 
 block :: Parser Block
 block = Block <$> topLevel
@@ -105,7 +117,7 @@ arrAssignment = do
 
 declAndAssignment :: Parser Expr
 declAndAssignment = do
-  type' <- try array <|> primType
+  type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
   reserved "="

@@ -131,6 +131,7 @@ allocBulk length size = do
 sizeof :: PrimType -> Size
 sizeof TInt  = Size_8
 sizeof TChar = Size_1
+sizeof TBool = Size_1
 sizeof other = error $ "`sizeof` is not implemented for type " <> show other
 
 initMemPointers :: MemPointers
@@ -141,6 +142,10 @@ initMemPointers = M.fromList
   , (Size_8, MemBlock 3 0)
   , (Size_32, MemBlock 4 0)
   ]
+
+boolToInt :: Bool -> Integer
+boolToInt True = 1
+boolToInt False = 0
 
 load
   :: Size

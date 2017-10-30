@@ -187,6 +187,11 @@ codegenTop (EChar val) = do
   storeVal (sizeof TChar) (fromIntegral (ord val)) addr
   return (Just (Operand TChar addr))
 
+codegenTop (EBool val) = do
+  addr <- alloc (sizeof TBool)
+  storeVal (sizeof TBool) (boolToInt val) addr
+  return (Just (Operand TBool addr))
+
 codegenTop (EBinop op expr1 expr2) = do
   Operand ty1 left <- codegenTopOperand expr1
   Operand ty2 right <- codegenTopOperand expr2
