@@ -144,7 +144,8 @@ eIf = do
   reserved "if"
   pred <- expr
   reserved "then"
-  body <- expr
+  body <- block
+  reserved "end"
   return (EIf pred body)
 
 factor :: Parser Expr

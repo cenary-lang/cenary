@@ -214,14 +214,14 @@ codegenTop (EDebug expr) = do
   op LOG1
   return Nothing
 
-codegenTop (EIf ePred body) = do
+codegenTop (EIf ePred bodyBlock) = do
   Operand tyPred addrPred <- codegenTopOperand ePred
   checkTyEq "if_expr" tyPred TBool
 
   load (sizeof TBool) addrPred
   op ISZERO -- Because we'll jump if it's FALSE
 
-  offset' <- get >>= liftIO . estimateOffset body
+  offset' <- get >>= liftIO . estimateOffset bodyBlock
   case offset' of
     Left err -> throwError err
     Right offset -> do
@@ -230,16 +230,21 @@ codegenTop (EIf ePred body) = do
       op ADD
       op JUMPI
 
-      void $ executeBlock (Block [body])
+      void $ executeBlock bodyBlock
       op JUMPDEST
       return Nothing
 
-estimateOffset :: Expr -> CodegenState -> IO (Either CodegenError Integer)
-estimateOffset expr state = do
+estimateOffset :: Block -> CodegenState -> IO (Either CodegenError Integer)
+estimateOffset (Block []) state = return (Right 0)
+estimateOffset (Block (expr:xs)) state = do
   let oldPc = _pc state
   result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop expr)) state))
-  let newPc = _pc <$> result
-  return $ flip (-) oldPc <$> newPc
+  case result of
+    Left err -> return (Left err)
+    Right newState -> do
+      let newPc = _pc newState
+      let diff = newPc - oldPc
+      fmap (fmap (+ diff)) $ estimateOffset (Block xs) newState
 
 markDest :: Evm ()
 markDest = do

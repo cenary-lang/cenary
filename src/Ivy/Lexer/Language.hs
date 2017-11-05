@@ -21,6 +21,6 @@ ops =
 
 names :: [String]
 names =
-  [ "if", "then", "else", "times", "endtimes"
+  [ "if", "then", "else", "times", "endtimes", "end"
   , "do", "debug", "true", "false", "int", "char", "bool"
   ]
