@@ -85,6 +85,7 @@ data CodegenState = CodegenState
   , _memPointers :: !MemPointers
   , _env         :: !Env
   , _memory      :: !(M.Map Integer Integer)
+  , _pc          :: Integer
   }
 
 makeLenses ''CodegenState

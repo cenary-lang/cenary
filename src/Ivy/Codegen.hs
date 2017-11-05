@@ -8,6 +8,7 @@ module Ivy.Codegen where
 import           Control.Applicative
 import           Control.Lens                   hiding (Context, assign, op)
 import           Control.Monad.Except
+import           Control.Monad.Logger hiding (logInfo, logDebug)
 import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State
 import           Data.Char                      (ord)
@@ -37,10 +38,11 @@ binOp t instr left right = do
 
 initCodegenState :: CodegenState
 initCodegenState = CodegenState
-  { _byteCode   = ""
+  { _byteCode    = ""
   , _memPointers = initMemPointers
-  , _memory     = M.empty
-  , _env        = [M.empty]
+  , _memory      = M.empty
+  , _env         = [M.empty]
+  , _pc          = 0
   }
 
 executeBlock :: Block -> Evm ()
@@ -212,6 +214,41 @@ codegenTop (EDebug expr) = do
   op2 PUSH32 0x03
   op LOG1
   return Nothing
+
+codegenTop (EIf ePred body) = do
+  Operand tyPred addrPred <- codegenTopOperand ePred
+  checkTyEq "if_expr" tyPred TBool
+
+  load (sizeof TBool) addrPred
+  op ISZERO -- Because we'll jump if it's FALSE
+
+  offset' <- get >>= liftIO . estimateOffset body
+  case offset' of
+    Left err -> throwError err
+    Right offset -> do
+      op2 PUSH32 (offset + 19) -- +1 because of an extra JUMPDEST instruction
+      op PC
+      op ADD
+      op JUMPI
+
+      void $ executeBlock (Block [body])
+      op JUMPDEST
+      return Nothing
+
+estimateOffset :: Expr -> CodegenState -> IO (Either CodegenError Integer)
+estimateOffset expr state = do
+  let oldPc = _pc state
+  result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop expr)) state))
+  let newPc = _pc <$> result
+  return $ flip (-) oldPc <$> newPc
+
+markDest :: Evm ()
+markDest = do
+  op JUMPDEST
+  op PC
+  op2 PUSH32 0x01
+  op SWAP1
+  op SUB
 
 codegenTopOperand :: Expr -> Evm Operand
 codegenTopOperand expr =

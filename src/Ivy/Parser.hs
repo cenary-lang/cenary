@@ -133,6 +133,20 @@ debug = do
   return (EDebug val)
   <?> "debug"
 
+eIdentifier :: Parser Expr
+eIdentifier =
+  EIdentifier
+    <$> identifier
+    <?> "identifier"
+
+eIf :: Parser Expr
+eIf = do
+  reserved "if"
+  pred <- expr
+  reserved "then"
+  body <- expr
+  return (EIf pred body)
+
 factor :: Parser Expr
 factor = try (parens expr <?> "parens")
      <|> try timesIterationBegin
@@ -141,7 +155,8 @@ factor = try (parens expr <?> "parens")
      <|> try varDecl
      <|> try arrAssignment
      <|> try assignment
-     <|> try (EIdentifier <$> identifier <?> "identifier")
+     <|> try eIdentifier
+     <|> try eIf
      <|> debug
      <?>  "factor"
 

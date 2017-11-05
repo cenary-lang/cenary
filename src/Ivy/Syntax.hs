@@ -33,4 +33,6 @@ data Expr =
   | EBinop Op Expr Expr
   | ETimes Integer Block
   | EDebug Expr
+  | EIf Expr Expr
+  | EIfThenElse Expr Expr Expr
   deriving Show
