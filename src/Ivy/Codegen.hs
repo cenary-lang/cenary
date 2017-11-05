@@ -8,7 +8,7 @@ module Ivy.Codegen where
 import           Control.Applicative
 import           Control.Lens                   hiding (Context, assign, op)
 import           Control.Monad.Except
-import           Control.Monad.Logger hiding (logInfo, logDebug)
+import           Control.Monad.Logger           hiding (logDebug, logInfo)
 import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State
 import           Data.Char                      (ord)
@@ -31,7 +31,6 @@ binOp t instr left right = do
   load (sizeof TInt) right
   op instr
   addr <- alloc (sizeof TInt)
-  logInfo $ "Address: " <> T.pack (show addr)
   op2 PUSH32 addr
   storeMultibyte (sizeof TInt)
   return (Just (Operand t addr))
@@ -226,7 +225,7 @@ codegenTop (EIf ePred body) = do
   case offset' of
     Left err -> throwError err
     Right offset -> do
-      op2 PUSH32 (offset + 19) -- +1 because of an extra JUMPDEST instruction
+      op2 PUSH32 (offset + 3) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.
       op PC
       op ADD
       op JUMPI
