@@ -1,0 +1,9 @@
+bool wow = true;
+int a = 0;
+int b;
+if wow then
+  a = 3;
+else
+  a = 4;
+end;
+b = 5;

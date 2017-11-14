@@ -75,6 +75,9 @@ toInstrCode LOG2     = (0xA2, 1)
 toInstrCode RETURN   = (0xf3, 1)
 toInstrCode ADDRESS  = (0x30, 1)
 
+pcCost :: Instruction -> Integer
+pcCost = snd . toInstrCode
+
 -- | Instructions other than JUMP and JUMPI increase PC by 1.
 -- See equation (136) in paper http://gavwood.com/paper.pdf
 addBC :: Integer -> Evm ()

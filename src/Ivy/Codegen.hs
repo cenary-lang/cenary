@@ -17,6 +17,7 @@ import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
 import           Prelude                        hiding (log, lookup)
+import           Data.Either.Combinators        (eitherToError)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -219,32 +220,62 @@ codegenTop (EIf ePred bodyBlock) = do
   checkTyEq "if_expr" tyPred TBool
 
   load (sizeof TBool) addrPred
-  op ISZERO -- Because we'll jump if it's FALSE
+  op ISZERO -- Negate for jumping condition
 
-  offset' <- get >>= liftIO . estimateOffset bodyBlock
-  case offset' of
-    Left err -> throwError err
-    Right offset -> do
-      op2 PUSH32 (offset + 3) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.
-      op PC
-      op ADD
-      op JUMPI
+  offset <- estimateOffset bodyBlock
+  op2 PUSH32 (offset + 3) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.
+  op PC
+  op ADD
+  op JUMPI
 
-      void $ executeBlock bodyBlock
-      op JUMPDEST
-      return Nothing
+  void $ executeBlock bodyBlock
+  op JUMPDEST
+  return Nothing
 
-estimateOffset :: Block -> CodegenState -> IO (Either CodegenError Integer)
-estimateOffset (Block []) state = return (Right 0)
-estimateOffset (Block (expr:xs)) state = do
-  let oldPc = _pc state
-  result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop expr)) state))
-  case result of
-    Left err -> return (Left err)
-    Right newState -> do
-      let newPc = _pc newState
-      let diff = newPc - oldPc
-      fmap (fmap (+ diff)) $ estimateOffset (Block xs) newState
+codegenTop (EIfThenElse ePred trueBlock falseBlock) = do
+  Operand tyPred addrPred <- codegenTopOperand ePred
+  checkTyEq "if_else_expr" tyPred TBool
+
+  load (sizeof TBool) addrPred
+  op ISZERO -- Negate for jumping condition
+
+  trueOffset <- estimateOffset trueBlock
+  let trueJumpDest = pcCost PC + pcCost ADD + pcCost JUMPI + trueOffset + pcCost PUSH32 + pcCost PC + pcCost ADD + pcCost JUMP
+
+  op2 PUSH32 trueJumpDest
+  op PC
+  op ADD
+  op JUMPI
+
+  executeBlock trueBlock
+  falseOffset <- estimateOffset falseBlock
+
+  let falseJumpDest = pcCost PC + pcCost ADD + pcCost JUMP + pcCost JUMPDEST + falseOffset
+  op2 PUSH32 falseJumpDest
+  op PC
+  op ADD
+  op JUMP
+
+  op JUMPDEST
+  executeBlock falseBlock
+  op JUMPDEST
+  return Nothing
+
+estimateOffset :: Block -> Evm Integer
+estimateOffset block =
+  get >>= liftIO . go block >>= eitherToError 
+    where
+      go :: Block -> CodegenState -> IO (Either CodegenError Integer)
+      go (Block []) state = return (Right 0)
+      go (Block (expr:xs)) state = do
+        let oldPc = _pc state
+        result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop expr)) state))
+        case result of
+          Left err -> return (Left err)
+          Right newState -> do
+            let newPc = _pc newState
+            let diff = newPc - oldPc
+            fmap (fmap (+ diff)) $ go (Block xs) newState
 
 markDest :: Evm ()
 markDest = do

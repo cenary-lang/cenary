@@ -139,6 +139,17 @@ eIdentifier =
     <$> identifier
     <?> "identifier"
 
+eIfThenElse :: Parser Expr
+eIfThenElse = do
+  reserved "if"
+  pred <- expr
+  reserved "then"
+  tBody <- block
+  reserved "else"
+  eBody <- block
+  reserved "end"
+  return (EIfThenElse pred tBody eBody)
+
 eIf :: Parser Expr
 eIf = do
   reserved "if"
@@ -157,6 +168,7 @@ factor = try (parens expr <?> "parens")
      <|> try arrAssignment
      <|> try assignment
      <|> try eIdentifier
+     <|> try eIfThenElse
      <|> try eIf
      <|> debug
      <?>  "factor"

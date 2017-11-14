@@ -34,5 +34,5 @@ data Expr =
   | ETimes Integer Block
   | EDebug Expr
   | EIf Expr Block
-  | EIfThenElse Expr Expr Expr
+  | EIfThenElse Expr Block Block
   deriving Show

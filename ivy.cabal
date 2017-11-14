@@ -36,7 +36,8 @@ executable ivy
     process,
     text,
     TypeCompose,
-    pretty-simple
+    pretty-simple,
+    either
   other-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
