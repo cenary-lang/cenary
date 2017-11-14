@@ -83,6 +83,9 @@ varDecl = do
 block :: Parser Block
 block = Block <$> topLevel
 
+curlied :: Parser a -> Parser a
+curlied p = reserved "{" *> p <* reserved "}"
+
 timesIterationBegin :: Parser Expr
 timesIterationBegin = do
   until <- integer
@@ -143,20 +146,16 @@ eIfThenElse :: Parser Expr
 eIfThenElse = do
   reserved "if"
   pred <- expr
-  reserved "then"
-  tBody <- block
+  tBody <- curlied block
   reserved "else"
-  eBody <- block
-  reserved "end"
+  eBody <- curlied block
   return (EIfThenElse pred tBody eBody)
 
 eIf :: Parser Expr
 eIf = do
   reserved "if"
   pred <- expr
-  reserved "then"
-  body <- block
-  reserved "end"
+  body <- curlied block
   return (EIf pred body)
 
 factor :: Parser Expr
