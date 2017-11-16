@@ -158,6 +158,20 @@ eIf = do
   body <- curlied block
   return (EIf pred body)
 
+eFunDef :: Parser Expr
+eFunDef = do
+  retType <-  typeAnnot
+  name <- identifier
+  reserved "()" -- TODO: Fill with args
+  body <- curlied block
+  return (EFunDef name body retType)
+
+eFunCall :: Parser Expr
+eFunCall = do
+  name <- identifier
+  reserved "()"
+  return (EFunCall name)
+
 factor :: Parser Expr
 factor = try (parens expr <?> "parens")
      <|> try timesIterationBegin
@@ -169,6 +183,8 @@ factor = try (parens expr <?> "parens")
      <|> try eIdentifier
      <|> try eIfThenElse
      <|> try eIf
+     <|> try eFunDef
+     <|> try eFunCall
      <|> debug
      <?>  "factor"
 

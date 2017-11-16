@@ -31,6 +31,7 @@ data CodegenError =
   | ScopedTypeViolation String PrimType PrimType
   | InternalError String
   | WrongOperandTypes PrimType PrimType
+  | NoReturnStatement
 
 type Addr = Integer
 data Operand = Operand PrimType Addr
@@ -58,6 +59,7 @@ instance Show CodegenError where
                                    <> " but a value of type "
                                    <> show tyR
                                    <> " is provided."
+  show NoReturnStatement = "Functions should have return statement as their last statement"
 
 data Size =
     Size_1
@@ -98,4 +100,5 @@ type ScopeLevel = Int
 data VariableStatus = NotDeclared
                     | Decl PrimType
                     | Def PrimType Integer
+                    | Fun Integer
                     | Error CodegenError

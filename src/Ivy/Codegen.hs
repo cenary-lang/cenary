@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Ivy.Codegen where
 
@@ -261,6 +262,20 @@ codegenTop (EIfThenElse ePred trueBlock falseBlock) = do
   op JUMPDEST
   return Nothing
 
+codegenTop (EFunDef name block@(Block body) retType) = do
+  retOp <- checkRetExistence retType body
+  return Nothing
+    where
+      checkRetExistence :: PrimType -> [Expr] -> Evm Operand
+      checkRetExistence retTy (reverse -> (expr:_)) =
+        case expr of
+          EReturn retExpr -> do
+            retOp@(Operand myRetTy _) <- codegenTopOperand retExpr
+            retOp <$ checkTyEq "ret_type" myRetTy retTy
+          _ -> throwError NoReturnStatement
+
+codegenTop (EFunCall name) = undefined
+
 estimateOffset :: Block -> Evm Integer
 estimateOffset block =
   get >>= liftIO . go block >>= eitherToError 
@@ -275,15 +290,7 @@ estimateOffset block =
           Right newState -> do
             let newPc = _pc newState
             let diff = newPc - oldPc
-            fmap (fmap (+ diff)) $ go (Block xs) newState
-
-markDest :: Evm ()
-markDest = do
-  op JUMPDEST
-  op PC
-  op2 PUSH32 0x01
-  op SWAP1
-  op SUB
+            ((+ diff) <$> ) <$> go (Block xs) newState
 
 codegenTopOperand :: Expr -> Evm Operand
 codegenTopOperand expr =
@@ -297,8 +304,5 @@ log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 codegenTop' :: Expr -> Evm (Maybe Operand)
 codegenTop' expr = do
   log "Expr" expr
-  -- use byteCode >>= log "ByteCode"
   use env >>= log "env"
-  -- use memory >>= log "Memory"
-  -- use memPointers >>= log "MemPointers"
   codegenTop expr

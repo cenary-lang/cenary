@@ -35,4 +35,7 @@ data Expr =
   | EDebug Expr
   | EIf Expr Block
   | EIfThenElse Expr Block Block
+  | EFunDef String Block PrimType
+  | EFunCall String
+  | EReturn Expr
   deriving Show
