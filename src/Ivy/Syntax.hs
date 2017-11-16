@@ -2,15 +2,15 @@ module Ivy.Syntax where
 
 type Name = String
 
-newtype Block = Block [Expr]
-  deriving Show
+newtype Block = Block [Stmt]
+  deriving (Eq, Show)
 
 data Op =
     OpAdd
   | OpMul
   | OpSub
   | OpDiv
-  deriving Show
+  deriving (Eq, Show)
 
 type Length = Integer
 
@@ -21,18 +21,20 @@ data PrimType =
   | TArray Length PrimType
   deriving (Eq, Show)
 
+data Stmt =
+    SVarDecl PrimType Name
+  | SDeclAndAssignment PrimType Name Expr
+  | SAssignment Name Expr
+  | SArrAssignment Name Expr Expr
+  | STimes Integer Block
+  | SIf Expr Block
+  | SIfThenElse Expr Block Block
+  deriving (Eq, Show)
+
 data Expr =
     EInt Integer
   | EChar Char
   | EBool Bool
   | EIdentifier Name
-  | EVarDecl PrimType Name
-  | EAssignment Name Expr
-  | EDeclAndAssignment PrimType Name Expr
-  | EArrAssignment Name Expr Expr
   | EBinop Op Expr Expr
-  | ETimes Integer Block
-  | EDebug Expr
-  | EIf Expr Block
-  | EIfThenElse Expr Block Block
-  deriving Show
+  deriving (Eq, Show)

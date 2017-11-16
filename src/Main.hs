@@ -36,7 +36,7 @@ instance Show Error where
   show (Codegen err) = "Codegen Error: " <> show err
   show (RuntimeError err) = "Codegen Error: " <> T.unpack err
 
-codegen :: Mode -> CodegenState -> [S.Expr] -> ExceptT Error IO T.Text
+codegen :: Mode -> CodegenState -> [S.Stmt] -> ExceptT Error IO T.Text
 codegen _ _ [] = return ""
 codegen mode state (e:ex) = do
   result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (C.codegenTop' e)) state))
@@ -45,7 +45,7 @@ codegen mode state (e:ex) = do
     Right newState ->
       (_byteCode newState <>) <$> codegen mode newState ex
 
-parse :: MonadIO m => T.Text -> ExceptT Error m [S.Expr]
+parse :: MonadIO m => T.Text -> ExceptT Error m [S.Stmt]
 parse code =
   case P.parseTopLevel code of
     Left (Parsing -> err) -> throwError err

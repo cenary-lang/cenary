@@ -26,7 +26,7 @@ import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
-binOp :: PrimType -> Instruction -> Integer -> Integer -> Evm (Maybe Operand)
+binOp :: PrimType -> Instruction -> Integer -> Integer -> Evm Operand
 binOp t instr left right = do
   load (sizeof TInt) left
   load (sizeof TInt) right
@@ -34,7 +34,7 @@ binOp t instr left right = do
   addr <- alloc (sizeof TInt)
   op2 PUSH32 addr
   storeMultibyte (sizeof TInt)
-  return (Just (Operand t addr))
+  return (Operand t addr)
 
 initCodegenState :: CodegenState
 initCodegenState = CodegenState
@@ -46,9 +46,9 @@ initCodegenState = CodegenState
   }
 
 executeBlock :: Block -> Evm ()
-executeBlock (Block bodyExpr) = do
+executeBlock (Block stmts) = do
   env %= (M.empty :)
-  mapM_ codegenTop' bodyExpr
+  mapM_ codegenTop' stmts
   env %= tail
 
 updateCtx :: (Context -> Context) -> Evm ()
@@ -68,11 +68,8 @@ assign tyR name addr = do
       updateCtx (M.update (const (Just (tyL, Just addr))) name)
 
 lookup :: String -> Evm VariableStatus
-lookup name = do
+lookup name =
   go =<< use env
-  -- g <- M.lookup name <$> use globalScope
-  -- l <- M.lookup name <$> use localScope
-  -- decide g l
   where
     go :: [Context] -> Evm VariableStatus
     go [] = return NotDeclared
@@ -103,8 +100,8 @@ checkTyEq :: Name -> PrimType -> PrimType -> Evm ()
 checkTyEq name tyL tyR =
   unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
-codegenTop :: Expr -> Evm (Maybe Operand)
-codegenTop (ETimes until block) = do
+codegenTop :: Stmt -> Evm ()
+codegenTop (STimes until block) = do
   -- Assign target value
   op2 PUSH32 until
   op JUMPDEST
@@ -128,17 +125,14 @@ codegenTop (ETimes until block) = do
   op SWAP2
   op JUMPI
 
-  return Nothing
-
-codegenTop (EAssignment name val) = do
-  Operand tyR addr <- codegenTopOperand val
+codegenTop (SAssignment name val) = do
+  Operand tyR addr <- codegenExpr val
   assign tyR name addr
-  return Nothing
 
-codegenTop (EArrAssignment name index val) = do
-  Operand tyI iAddr <- codegenTopOperand index
+codegenTop (SArrAssignment name index val) = do
+  Operand tyI iAddr <- codegenExpr index
   checkTyEq ("index_of_" <> name) TInt tyI
-  Operand tyR addr <- codegenTopOperand val
+  Operand tyR addr <- codegenExpr val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name
     Decl _tyL -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
@@ -154,10 +148,9 @@ codegenTop (EArrAssignment name index val) = do
       op ADD
 
       storeMultibyte (sizeof aTy)
-      return Nothing
     Def other _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 
-codegenTop (EVarDecl ty name) = do
+codegenTop (SVarDecl ty name) =
   lookup name >>= \case
     Decl _ -> throwError (VariableAlreadyDeclared name)
     Def _ _ -> throwError (VariableAlreadyDeclared name)
@@ -166,57 +159,13 @@ codegenTop (EVarDecl ty name) = do
           TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
           _                 -> return Nothing
       updateCtx (M.insert name (ty, mb_addr))
-  return Nothing
 
-codegenTop (EDeclAndAssignment ty name val) = do
-  codegenTop (EVarDecl ty name)
-  codegenTop (EAssignment name val)
-  return Nothing
+codegenTop (SDeclAndAssignment ty name val) = do
+  codegenTop (SVarDecl ty name)
+  codegenTop (SAssignment name val)
 
-codegenTop (EIdentifier name) = do
-  lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name)
-    Decl _ -> throwError (VariableNotDefined name)
-    Def ty addr -> return (Just (Operand ty addr))
-
-codegenTop (EInt val) = do
-  addr <- alloc (sizeof TInt)
-  storeVal (sizeof TInt) val addr
-  return (Just (Operand TInt addr))
-
-codegenTop (EChar val) = do
-  addr <- alloc (sizeof TChar)
-  storeVal (sizeof TChar) (fromIntegral (ord val)) addr
-  return (Just (Operand TChar addr))
-
-codegenTop (EBool val) = do
-  addr <- alloc (sizeof TBool)
-  storeVal (sizeof TBool) (boolToInt val) addr
-  return (Just (Operand TBool addr))
-
-codegenTop (EBinop op expr1 expr2) = do
-  Operand ty1 left <- codegenTopOperand expr1
-  Operand ty2 right <- codegenTopOperand expr2
-  case (ty1, ty2) of
-    (TInt, TInt) ->
-      case op of
-        OpAdd -> binOp TInt ADD left right
-        OpMul -> binOp TInt MUL left right
-        OpSub -> binOp TInt SUB left right
-        OpDiv -> binOp TInt DIV left right
-    _ -> throwError $ WrongOperandTypes ty1 ty2
-
-codegenTop (EDebug expr) = do
-  Operand _ty addr <- codegenTopOperand expr
-  op2 PUSH32 addr
-  op MLOAD
-  op2 PUSH32 0x05
-  op2 PUSH32 0x03
-  op LOG1
-  return Nothing
-
-codegenTop (EIf ePred bodyBlock) = do
-  Operand tyPred addrPred <- codegenTopOperand ePred
+codegenTop (SIf ePred bodyBlock) = do
+  Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
 
   load (sizeof TBool) addrPred
@@ -230,10 +179,9 @@ codegenTop (EIf ePred bodyBlock) = do
 
   void $ executeBlock bodyBlock
   op JUMPDEST
-  return Nothing
 
-codegenTop (EIfThenElse ePred trueBlock falseBlock) = do
-  Operand tyPred addrPred <- codegenTopOperand ePred
+codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
+  Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
   load (sizeof TBool) addrPred
@@ -259,7 +207,6 @@ codegenTop (EIfThenElse ePred trueBlock falseBlock) = do
   op JUMPDEST
   executeBlock falseBlock
   op JUMPDEST
-  return Nothing
 
 estimateOffset :: Block -> Evm Integer
 estimateOffset block =
@@ -267,9 +214,9 @@ estimateOffset block =
     where
       go :: Block -> CodegenState -> IO (Either CodegenError Integer)
       go (Block []) state = return (Right 0)
-      go (Block (expr:xs)) state = do
+      go (Block (stmt:xs)) state = do
         let oldPc = _pc state
-        result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop expr)) state))
+        result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop stmt)) state))
         case result of
           Left err -> return (Left err)
           Right newState -> do
@@ -285,20 +232,48 @@ markDest = do
   op SWAP1
   op SUB
 
-codegenTopOperand :: Expr -> Evm Operand
-codegenTopOperand expr =
-  codegenTop' expr >>= \case
-    Just val -> return val
-    Nothing -> throwError $ InternalError $ "Following expression should have returned an operand, but it didn't: " <> show expr
+codegenExpr :: Expr -> Evm Operand
+codegenExpr (EIdentifier name) = do
+  lookup name >>= \case
+    NotDeclared -> throwError (VariableNotDeclared name)
+    Decl _ -> throwError (VariableNotDefined name)
+    Def ty addr -> return (Operand ty addr)
+
+codegenExpr (EInt val) = do
+  addr <- alloc (sizeof TInt)
+  storeVal (sizeof TInt) val addr
+  return (Operand TInt addr)
+
+codegenExpr (EChar val) = do
+  addr <- alloc (sizeof TChar)
+  storeVal (sizeof TChar) (fromIntegral (ord val)) addr
+  return (Operand TChar addr)
+
+codegenExpr (EBool val) = do
+  addr <- alloc (sizeof TBool)
+  storeVal (sizeof TBool) (boolToInt val) addr
+  return (Operand TBool addr)
+
+codegenExpr (EBinop op expr1 expr2) = do
+  Operand ty1 left <- codegenExpr expr1
+  Operand ty2 right <- codegenExpr expr2
+  case (ty1, ty2) of
+    (TInt, TInt) ->
+      case op of
+        OpAdd -> binOp TInt ADD left right
+        OpMul -> binOp TInt MUL left right
+        OpSub -> binOp TInt SUB left right
+        OpDiv -> binOp TInt DIV left right
+    _ -> throwError $ WrongOperandTypes ty1 ty2
 
 log :: Show a => T.Text -> a -> Evm ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 
-codegenTop' :: Expr -> Evm (Maybe Operand)
-codegenTop' expr = do
-  log "Expr" expr
+codegenTop' :: Stmt -> Evm ()
+codegenTop' stmt = do
+  log "Expr" stmt
   -- use byteCode >>= log "ByteCode"
   use env >>= log "env"
   -- use memory >>= log "Memory"
   -- use memPointers >>= log "MemPointers"
-  codegenTop expr
+  codegenTop stmt

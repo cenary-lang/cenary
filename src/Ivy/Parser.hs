@@ -55,7 +55,22 @@ binops = [ [ binary "*" OpMul AssocLeft
          ]
 
 expr :: Parser Expr
-expr = buildExpressionParser binops factor
+expr = buildExpressionParser binops expr'
+  where
+    expr' :: Parser Expr
+    expr' = try (parens expr <?> "parens")
+         <|> try prims
+         <|> try eIdentifier
+         <?>  "factor"
+
+stmt :: Parser Stmt
+stmt = try declAndAssignment
+   <|> try times
+   <|> try varDecl
+   <|> try arrAssignment
+   <|> try assignment
+   <|> try eIfThenElse
+   <|> try eIf
 
 typeAnnot :: Parser PrimType
 typeAnnot =
@@ -72,12 +87,12 @@ array = do
   char ']'
   return (TArray size type')
 
-varDecl :: Parser Expr
+varDecl :: Parser Stmt
 varDecl = do
   type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
-  return $ EVarDecl type' name
+  return $ SVarDecl type' name
   <?> "variable declaration"
 
 block :: Parser Block
@@ -86,26 +101,26 @@ block = Block <$> topLevel
 curlied :: Parser a -> Parser a
 curlied p = reserved "{" *> p <* reserved "}"
 
-timesIterationBegin :: Parser Expr
-timesIterationBegin = do
+times :: Parser Stmt
+times = do
   until <- integer
   symbol "."
   reserved "times"
   reserved "do"
   body <- block
   reserved "endtimes"
-  return (ETimes until body)
+  return (STimes until body)
   <?> "times iteration"
 
-assignment :: Parser Expr
+assignment :: Parser Stmt
 assignment = do
   name <- identifier
   reserved "="
   rhs <- expr
-  return (EAssignment name rhs)
+  return (SAssignment name rhs)
   <?> "assignment"
 
-arrAssignment :: Parser Expr
+arrAssignment :: Parser Stmt
 arrAssignment = do
   name <- identifier
   char '['
@@ -115,26 +130,17 @@ arrAssignment = do
   reserved "="
   whitespace
   val <- expr
-  return (EArrAssignment name index val)
+  return (SArrAssignment name index val)
   <?> "array assignment"
 
-declAndAssignment :: Parser Expr
+declAndAssignment :: Parser Stmt
 declAndAssignment = do
   type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
   reserved "="
   rhs <- expr
-  return (EDeclAndAssignment type' name rhs)
-
-debug :: Parser Expr
-debug = do
-  reserved "debug"
-  char '('
-  val <- expr
-  char ')'
-  return (EDebug val)
-  <?> "debug"
+  return (SDeclAndAssignment type' name rhs)
 
 eIdentifier :: Parser Expr
 eIdentifier =
@@ -142,43 +148,29 @@ eIdentifier =
     <$> identifier
     <?> "identifier"
 
-eIfThenElse :: Parser Expr
+eIfThenElse :: Parser Stmt
 eIfThenElse = do
   reserved "if"
   pred <- expr
   tBody <- curlied block
   reserved "else"
   eBody <- curlied block
-  return (EIfThenElse pred tBody eBody)
+  return (SIfThenElse pred tBody eBody)
 
-eIf :: Parser Expr
+eIf :: Parser Stmt
 eIf = do
   reserved "if"
   pred <- expr
   body <- curlied block
-  return (EIf pred body)
+  return (SIf pred body)
 
-factor :: Parser Expr
-factor = try (parens expr <?> "parens")
-     <|> try timesIterationBegin
-     <|> try declAndAssignment
-     <|> try prims
-     <|> try varDecl
-     <|> try arrAssignment
-     <|> try assignment
-     <|> try eIdentifier
-     <|> try eIfThenElse
-     <|> try eIf
-     <|> debug
-     <?>  "factor"
-
-topLevel :: Parser [Expr]
-topLevel = do
-  many (expr <* reserved ";")
+topLevel :: Parser [Stmt]
+topLevel =
+  many (stmt <* reserved ";")
   <?> "topLevel"
 
-parse :: T.Text -> Either ParseError Expr
-parse = T.unpack >>> P.parse expr "<unknown>"
+parse :: T.Text -> Either ParseError Stmt
+parse = T.unpack >>> P.parse stmt "<unknown>"
 
-parseTopLevel :: T.Text -> Either ParseError [Expr]
+parseTopLevel :: T.Text -> Either ParseError [Stmt]
 parseTopLevel = T.unpack >>> P.parse topLevel "<unknown>"
