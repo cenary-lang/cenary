@@ -29,6 +29,17 @@ storeAddressed size valAddr destAddr = do
   op2 PUSH32 destAddr
   storeMultibyte size
 
+load
+  :: Size
+  -> Integer
+  -> Evm ()
+load size addr = do
+  op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
+  logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
+  op2 PUSH32 addr
+  op MLOAD
+  op DIV
+
 storeVal
   :: Size    -- Variable size
   -> Integer -- Actual value
@@ -144,19 +155,9 @@ initMemPointers = M.fromList
   ]
 
 boolToInt :: Bool -> Integer
-boolToInt True = 1
+boolToInt True  = 1
 boolToInt False = 0
 
-load
-  :: Size
-  -> Address
-  -> Evm ()
-load size addr = do
-  op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
-  logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
-  op2 PUSH32 addr
-  op MLOAD
-  op DIV
 
 {-|
 Given the size and necessary stack state, stores that much byte properly aligned.
@@ -223,8 +224,8 @@ storeMultibyte size = do
   op POP
 
 sizeInt :: Size -> Integer
-sizeInt Size_1 = 1
-sizeInt Size_2 = 2
-sizeInt Size_4 = 4
-sizeInt Size_8 = 8
+sizeInt Size_1  = 1
+sizeInt Size_2  = 2
+sizeInt Size_4  = 4
+sizeInt Size_8  = 8
 sizeInt Size_32 = 32
