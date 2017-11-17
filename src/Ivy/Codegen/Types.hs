@@ -1,9 +1,9 @@
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 
 module Ivy.Codegen.Types where
 
@@ -14,17 +14,23 @@ import           Control.Monad.Except
 import           Control.Monad.Logger           hiding (logInfo)
 import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Monad.State
-import           Data.Functor.Identity
 import           Data.Functor                   (($>))
+import           Data.Functor.Identity
 import qualified Data.Map                       as M
 import           Data.Semigroup                 ((<>))
 import qualified Data.Text                      as T
 --------------------------------------------------------------------------------
-import           Ivy.Syntax                     (PrimType(..))
+import           Ivy.Syntax                     (Expr, PrimType (..), Stmt)
 --------------------------------------------------------------------------------
 
+data ErrorDetails = NoDetails
+                  | ExprDetails Expr
+                  | StmtDetails Stmt
+                  | TextDetails String
+                  deriving Show -- TODO: we can use a manual instance declaration, actually.
+
 data CodegenError =
-    VariableNotDeclared String
+    VariableNotDeclared String ErrorDetails
   | VariableAlreadyDeclared String
   | VariableNotDefined String
   | TypeMismatch String PrimType PrimType
@@ -37,7 +43,7 @@ type Addr = Integer
 data Operand = Operand PrimType Addr
 
 instance Show CodegenError where
-  show (VariableNotDeclared var) = "Variable " <> var <> " is not declared."
+  show (VariableNotDeclared var details) = "Variable " <> var <> " is not declared. Details: " ++ show details
   show (VariableNotDefined var)  = "Variable " <> var <> " is not defined."
   show (VariableAlreadyDeclared var) = "Variable " <> var <> " is already declared."
   show (TypeMismatch name expected actual) = "Type mismatch for variable "
@@ -69,9 +75,12 @@ data Size =
   | Size_32
   deriving (Show, Eq, Ord)
 
-type Address = Integer
+data Address = VarAddr (Maybe Integer)
+             | FunAddr Integer Integer
+             deriving Show
+
 type Env = [Context] -- A stack
-type Context = M.Map String (PrimType, Maybe Address)
+type Context = M.Map String (PrimType, Address)
 
 data MemBlock = MemBlock
   { _memBlockIndex     :: Integer
@@ -100,5 +109,6 @@ type ScopeLevel = Int
 data VariableStatus = NotDeclared
                     | Decl PrimType
                     | Def PrimType Integer
-                    | Fun Integer
+                    | FunDef PrimType Integer Integer
+                    -- ^ FunDef retTy funAddr retAddr
                     | Error CodegenError

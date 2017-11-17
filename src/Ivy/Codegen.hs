@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module Ivy.Codegen where
 
@@ -13,12 +12,12 @@ import           Control.Monad.Logger           hiding (logDebug, logInfo)
 import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State
 import           Data.Char                      (ord)
+import           Data.Either.Combinators        (eitherToError)
 import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
 import           Prelude                        hiding (log, lookup)
-import           Data.Either.Combinators        (eitherToError)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -57,16 +56,16 @@ updateCtx f =
   env %= (\(ctx:xs) -> (f ctx:xs))
 
 assign :: PrimType -> Name -> Integer -> Evm ()
-assign tyR name addr = do
+assign tyR name addr =
   lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name)
+    NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
     Decl tyL -> do
       checkTyEq name tyL tyR
-      updateCtx (M.update (const (Just (tyL, Just addr))) name)
+      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
     Def tyL oldAddr -> do
       checkTyEq name tyL tyR
       storeAddressed (sizeof tyL) addr oldAddr
-      updateCtx (M.update (const (Just (tyL, Just addr))) name)
+      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
 
 lookup :: String -> Evm VariableStatus
 lookup name =
@@ -76,26 +75,29 @@ lookup name =
     go [] = return NotDeclared
     go (ctx:xs) =
       case M.lookup name ctx of
-        Just (ty, Nothing)   -> return (Decl ty)
-        Just (ty, Just addr) -> return (Def ty addr)
-        Nothing              -> go xs
+        Just (TFun retTy, FunAddr funAddr retAddr)   -> return (FunDef retTy funAddr retAddr)
+        Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
+        Nothing -> go xs
+      where
+        decideVar (ty, Nothing)   = return (Decl ty)
+        decideVar (ty, Just addr) = return (Def ty addr)
 
-    decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
-    decide Nothing                   Nothing                = return NotDeclared
-    decide Nothing                   (Just (ty, Nothing))   = return $ Decl ty
-    decide Nothing                   (Just (ty, Just val))  = return $ Def ty val
-    decide (Just (ty, Nothing))      Nothing                = return $ Decl ty
-    decide (Just (_ty1, Nothing))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-    decide (Just (ty1, Nothing))     (Just (ty2, Just val)) =
-      if ty1 == ty2
-         then return $ Def ty1 val
-         else throwError (ScopedTypeViolation name ty1 ty2)
-    decide (Just (ty, Just val))      Nothing                = return $ Def ty val
-    decide (Just (_ty1, Just val))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-    decide (Just (ty1, Just _))       (Just (ty2, Just val)) =
-      if ty1 == ty2
-         then return $ Def ty1 val -- Local value overrides
-         else throwError (ScopedTypeViolation name ty1 ty2)
+        decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
+        decide Nothing                   Nothing                = return NotDeclared
+        decide Nothing                   (Just (ty, Nothing))   = return $ Decl ty
+        decide Nothing                   (Just (ty, Just val))  = return $ Def ty val
+        decide (Just (ty, Nothing))      Nothing                = return $ Decl ty
+        decide (Just (_ty1, Nothing))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
+        decide (Just (ty1, Nothing))     (Just (ty2, Just val)) =
+          if ty1 == ty2
+             then return $ Def ty1 val
+             else throwError (ScopedTypeViolation name ty1 ty2)
+        decide (Just (ty, Just val))      Nothing                = return $ Def ty val
+        decide (Just (_ty1, Just val))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
+        decide (Just (ty1, Just _))       (Just (ty2, Just val)) =
+          if ty1 == ty2
+             then return $ Def ty1 val -- Local value overrides
+             else throwError (ScopedTypeViolation name ty1 ty2)
 
 checkTyEq :: Name -> PrimType -> PrimType -> Evm ()
 checkTyEq name tyL tyR =
@@ -130,12 +132,12 @@ codegenTop (SAssignment name val) = do
   Operand tyR addr <- codegenExpr val
   assign tyR name addr
 
-codegenTop (SArrAssignment name index val) = do
+codegenTop stmt@(SArrAssignment name index val) = do
   Operand tyI iAddr <- codegenExpr index
   checkTyEq ("index_of_" <> name) TInt tyI
   Operand tyR addr <- codegenExpr val
   lookup name >>= \case
-    NotDeclared -> throwError $ VariableNotDeclared name
+    NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
     Def (TArray length aTy) oldAddr -> do
       checkTyEq name aTy tyR
@@ -159,7 +161,7 @@ codegenTop (SVarDecl ty name) =
       mb_addr <- case ty of
           TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
           _                 -> return Nothing
-      updateCtx (M.insert name (ty, mb_addr))
+      updateCtx (M.insert name (ty, VarAddr mb_addr))
 
 codegenTop (SDeclAndAssignment ty name val) = do
   codegenTop (SVarDecl ty name)
@@ -199,7 +201,7 @@ codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
   executeBlock trueBlock
   falseOffset <- estimateOffset falseBlock
 
-  let falseJumpDest = pcCost PC + pcCost ADD + pcCost JUMP + pcCost JUMPDEST + falseOffset
+  let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
   op2 PUSH32 falseJumpDest
   op PC
   op ADD
@@ -209,23 +211,39 @@ codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
   executeBlock falseBlock
   op JUMPDEST
 
-codegenTop (SFunDef name block@(Block body) retType) = do
-  retOp <- checkRetExistence retType body
+codegenTop (SReturn retExpr) =
+  void (codegenExpr retExpr)
+
+codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
+  offset <- estimateOffset block
+  op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
+  op PC
+  op ADD
+  op JUMP
+  funPc <- use pc
+  op JUMPDEST
+  Operand retTy retAddr <- executeFunBlock block
+  checkTyEq "function definition" retTyAnnot retTy
+  op JUMP -- Before calling function, we push PC, so we remember and jump to it
+  op JUMPDEST
+  updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
     where
-      checkRetExistence :: PrimType -> [Stmt] -> Evm Operand
-      checkRetExistence retTy (reverse -> (expr:_)) =
-        case expr of
-          SReturn retExpr -> do
-            retOp@(Operand myRetTy _) <- codegenExpr retExpr
-            retOp <$ checkTyEq "ret_type" myRetTy retTy
-          _ -> throwError NoReturnStatement
+      executeFunBlock :: Block -> Evm Operand
+      executeFunBlock (Block stmts) = do
+        env %= (M.empty :)
+        go stmts <* (env %= tail)
+          where
+            go :: [Stmt] -> Evm Operand
+            go []             = throwError NoReturnStatement
+            go [SReturn expr] = codegenExpr expr
+            go (stmt:xs)      = codegenTop' stmt >> go xs
 
-codegenTop (SFunCall name) = undefined
+codegenTop (SExpr expr) = void (codegenExpr expr)
 
 estimateOffset :: Block -> Evm Integer
 estimateOffset block =
-  get >>= liftIO . go block >>= eitherToError 
+  get >>= liftIO . go block >>= eitherToError
     where
       go :: Block -> CodegenState -> IO (Either CodegenError Integer)
       go (Block []) state = return (Right 0)
@@ -240,9 +258,9 @@ estimateOffset block =
             ((+ diff) <$> ) <$> go (Block xs) newState
 
 codegenExpr :: Expr -> Evm Operand
-codegenExpr (EIdentifier name) = do
+codegenExpr expr@(EIdentifier name) = do
   lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name)
+    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     Decl _ -> throwError (VariableNotDefined name)
     Def ty addr -> return (Operand ty addr)
 
@@ -272,6 +290,24 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
+
+codegenExpr expr@(EFunCall name) =
+  lookup name >>= \case
+    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
+    FunDef retTy funAddr retAddr -> do
+      -- Preparing checkpoint
+      op PC
+      pc' <- use pc
+      op2 PUSH32 (pcCosts [PUSH32, JUMP, PUSH32, JUMP, JUMPDEST])
+      op ADD
+
+      -- Jumping to function
+      op2 PUSH32 (pc' + pcCosts [PC, PUSH32, JUMP])
+      op JUMP
+      op JUMPDEST
+
+      return (Operand retTy retAddr)
+    _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
 
 log :: Show a => T.Text -> a -> Evm ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)

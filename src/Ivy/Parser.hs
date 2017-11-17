@@ -60,17 +60,31 @@ expr = buildExpressionParser binops expr'
     expr' :: Parser Expr
     expr' = try (parens expr <?> "parens")
          <|> try prims
-         <|> try eIdentifier
+         <|> try eFunCall
+         <|> eIdentifier
          <?>  "factor"
 
 stmt :: Parser Stmt
 stmt = try declAndAssignment
    <|> try times
+   <|> try eFunDef
    <|> try varDecl
    <|> try arrAssignment
    <|> try assignment
    <|> try eIfThenElse
-   <|> try eIf
+   <|> try sReturn
+   <|> try sExpr
+   <|> eIf
+   <?> "Statement"
+
+sExpr :: Parser Stmt
+sExpr = SExpr <$> expr
+
+sReturn :: Parser Stmt
+sReturn = do
+  reserved "return"
+  retExpr <- expr
+  return (SReturn retExpr)
 
 typeAnnot :: Parser PrimType
 typeAnnot =
@@ -141,6 +155,7 @@ declAndAssignment = do
   reserved "="
   rhs <- expr
   return (SDeclAndAssignment type' name rhs)
+  <?> "decl and assignment"
 
 eIdentifier :: Parser Expr
 eIdentifier =
@@ -156,20 +171,27 @@ eIfThenElse = do
   reserved "else"
   eBody <- curlied block
   return (SIfThenElse pred tBody eBody)
+  <?> "if then else"
 
 eFunDef :: Parser Stmt
 eFunDef = do
-  retType <-  typeAnnot
+  retType <- try array <|> typeAnnot
+  whitespace
   name <- identifier
-  reserved "()" -- TODO: Fill with args
+  whitespace
+  char '('
+  char ')'
   body <- curlied block
   return (SFunDef name body retType)
+  <?> "function definition"
 
-eFunCall :: Parser Stmt
+eFunCall :: Parser Expr
 eFunCall = do
   name <- identifier
-  reserved "()"
-  return (SFunCall name)
+  char '('
+  char ')'
+  return (EFunCall name)
+  <?> "function call"
 
 eIf :: Parser Stmt
 eIf = do
@@ -177,6 +199,7 @@ eIf = do
   pred <- expr
   body <- curlied block
   return (SIf pred body)
+  <?> "if statement"
 
 topLevel :: Parser [Stmt]
 topLevel =
@@ -184,7 +207,7 @@ topLevel =
   <?> "topLevel"
 
 parse :: T.Text -> Either ParseError Stmt
-parse = T.unpack >>> P.parse stmt "<unknown>"
+parse = T.unpack >>> P.parse stmt "<stmt-toplevel>"
 
 parseTopLevel :: T.Text -> Either ParseError [Stmt]
-parseTopLevel = T.unpack >>> P.parse topLevel "<unknown>"
+parseTopLevel = T.unpack >>> P.parse topLevel "<stmt-toplevel>"

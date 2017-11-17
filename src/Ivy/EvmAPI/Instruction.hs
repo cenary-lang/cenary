@@ -78,6 +78,9 @@ toInstrCode ADDRESS  = (0x30, 1)
 pcCost :: Instruction -> Integer
 pcCost = snd . toInstrCode
 
+pcCosts :: [Instruction] -> Integer
+pcCosts = sum . map pcCost
+
 -- | Instructions other than JUMP and JUMPI increase PC by 1.
 -- See equation (136) in paper http://gavwood.com/paper.pdf
 addBC :: Integer -> Evm ()

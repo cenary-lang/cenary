@@ -1,5 +1,8 @@
-bool wow = false;
-int a;
-if wow {
-  a = 3;
+bool makeWow (){
+  int b = 5;
+  return false;
+};
+
+if(makeWow()) {
+  int b = 6;
 };
