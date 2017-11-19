@@ -39,7 +39,7 @@ instance Show Error where
 codegen :: Mode -> CodegenState -> [S.Stmt] -> ExceptT Error IO T.Text
 codegen _ _ [] = return ""
 codegen mode state (e:ex) = do
-  result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (C.codegenTop' e)) state))
+  let result = execStateT (runEvm (C.codegenTop' e)) state
   case result of
     Left (Codegen -> err)       -> throwError err
     Right newState ->

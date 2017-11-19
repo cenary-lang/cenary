@@ -237,23 +237,23 @@ codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
 
 codegenTop (SExpr expr) = void (codegenExpr expr)
 
-estimateOffset :: (MonadError CodegenError m, MonadIO m, MonadState CodegenState m) => Block -> m Integer
+estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
 estimateOffset block = do
-  get >>= liftIO . go block >>= eitherToError
+  get >>= eitherToError . go block
     where
-      go :: Block -> CodegenState -> IO (Either CodegenError Integer)
-      go (Block []) state = return (Right 0)
+      go :: Block -> CodegenState -> (Either CodegenError Integer)
+      go (Block []) state = Right 0
       go (Block (stmt:xs)) state = do
         let oldPc = _pc state
-        result <- liftIO $ runExceptT (runStdoutLoggingT (execStateT (runEvm (codegenTop stmt)) state))
+        let result = execStateT (runEvm (codegenTop stmt)) state
         case result of
-          Left err -> return (Left err)
+          Left err -> Left err
           Right newState -> do
             let newPc = _pc newState
             let diff = newPc - oldPc
-            ((+ diff) <$> ) <$> go (Block xs) newState
+            ((+ diff) <$> ) (go (Block xs) newState)
 
-type CodegenM m = (MonadIO m, MonadLogger m, OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
 codegenExpr :: CodegenM m => Expr -> m Operand
 codegenExpr expr@(EIdentifier name) = do
   lookup name >>= \case
@@ -306,10 +306,6 @@ codegenExpr expr@(EFunCall name) =
       return (Operand retTy retAddr)
     _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
 
-log :: (Show a, MonadLogger m) => T.Text -> a -> m ()
-log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
-
 codegenTop' :: CodegenM m => Stmt -> m ()
 codegenTop' stmt = do
-  use env >>= log "env"
   codegenTop stmt

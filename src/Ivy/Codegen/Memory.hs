@@ -51,7 +51,6 @@ instance MemoryM Evm where
 
   load size addr = do
     op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
-    logInfo $ "Loading with size: " <> T.pack (show (sizeInt size))
     op2 PUSH32 addr
     op MLOAD
     op DIV

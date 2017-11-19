@@ -11,8 +11,6 @@ module Ivy.Codegen.Types where
 import           Control.Arrow
 import           Control.Lens                   hiding (Context)
 import           Control.Monad.Except
-import           Control.Monad.Logger           hiding (logInfo)
-import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Monad.State
 import           Data.Functor                   (($>))
 import           Data.Functor.Identity
@@ -101,8 +99,8 @@ data CodegenState = CodegenState
 
 makeLenses ''CodegenState
 
-newtype Evm a = Evm { runEvm :: StateT CodegenState (LoggingT (ExceptT CodegenError IO)) a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadState CodegenState, MonadError CodegenError, MonadLogger)
+newtype Evm a = Evm { runEvm :: StateT CodegenState (Either CodegenError) a }
+  deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError)
 
 type ScopeLevel = Int
 
