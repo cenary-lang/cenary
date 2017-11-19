@@ -81,7 +81,7 @@ pcCost = snd . toInstrCode
 pcCosts :: [Instruction] -> Integer
 pcCosts = sum . map pcCost
 
--- Class of monads that can run opcodes
+-- | Class of monads that can run opcodes
 class Monad m => OpcodeM m where
   op :: Instruction -> m ()
   -- ^ Opcode without argument

@@ -29,6 +29,7 @@ import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
+-- | Class of monads that are able to read and update context
 class ContextM m where
   updateCtx :: (Context -> Context) -> m ()
   lookup :: String -> m VariableStatus
@@ -50,7 +51,8 @@ instance ContextM Evm where
           decideVar (ty, Nothing)   = return (Decl ty)
           decideVar (ty, Just addr) = return (Def ty addr)
 
-class Monad m => TcM m where
+-- | Class of monads that can perform a typechecking
+class TcM m where
   checkTyEq :: Name -> PrimType -> PrimType -> m ()
 
 instance TcM Evm where
@@ -238,24 +240,28 @@ codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
 codegenTop (SExpr expr) = void (codegenExpr expr)
 
 estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
-estimateOffset block = do
+estimateOffset block =
   get >>= eitherToError . go block
     where
-      go :: Block -> CodegenState -> (Either CodegenError Integer)
+      go :: Block -> CodegenState -> Either CodegenError Integer
       go (Block []) state = Right 0
-      go (Block (stmt:xs)) state = do
+      go (Block (stmt:xs)) state =
         let oldPc = _pc state
-        let result = execStateT (runEvm (codegenTop stmt)) state
-        case result of
-          Left err -> Left err
-          Right newState -> do
-            let newPc = _pc newState
-            let diff = newPc - oldPc
-            ((+ diff) <$> ) (go (Block xs) newState)
+            result = execStateT (runEvm (codegenTop stmt)) state
+        in
+          case result of
+            Left err -> Left err
+            Right newState -> do
+              let newPc = _pc newState
+              let diff = newPc - oldPc
+              (+ diff) <$> go (Block xs) newState
 
+-- | This type alias will be used for top-level codegen, since
+-- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+
 codegenExpr :: CodegenM m => Expr -> m Operand
-codegenExpr expr@(EIdentifier name) = do
+codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     Decl _ -> throwError (VariableNotDefined name)
