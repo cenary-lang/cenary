@@ -29,12 +29,10 @@ import           Utils.EvmAsm        (asm)
 data Error =
     Parsing ParseError
   | Codegen CodegenError
-  | RuntimeError T.Text
 
 instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Codegen Error: " <> show err
-  show (RuntimeError err) = "Codegen Error: " <> T.unpack err
 
 codegen :: Mode -> CodegenState -> [S.Stmt] -> ExceptT Error IO T.Text
 codegen _ _ [] = return ""
