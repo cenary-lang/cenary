@@ -1,6 +1,9 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Ivy.Codegen where
 
@@ -26,7 +29,35 @@ import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
-binOp :: PrimType -> Instruction -> Integer -> Integer -> Evm Operand
+class ContextM m where
+  updateCtx :: (Context -> Context) -> m ()
+  lookup :: String -> m VariableStatus
+
+instance ContextM Evm where
+  updateCtx f =
+    env %= (\(ctx:xs) -> (f ctx:xs))
+  lookup name =
+    go =<< use env
+    where
+      go :: [Context] -> Evm VariableStatus
+      go [] = return NotDeclared
+      go (ctx:xs) =
+        case M.lookup name ctx of
+          Just (TFun retTy, FunAddr funAddr retAddr)   -> return (FunDef retTy funAddr retAddr)
+          Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
+          Nothing -> go xs
+        where
+          decideVar (ty, Nothing)   = return (Decl ty)
+          decideVar (ty, Just addr) = return (Def ty addr)
+
+class Monad m => TcM m where
+  checkTyEq :: Name -> PrimType -> PrimType -> m ()
+
+instance TcM Evm where
+  checkTyEq name tyL tyR =
+    unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
+
+binOp :: (OpcodeM m, MemoryM m) => PrimType -> Instruction -> Integer -> Integer -> m Operand
 binOp t instr left right = do
   load (sizeof TInt) left
   load (sizeof TInt) right
@@ -45,17 +76,18 @@ initCodegenState = CodegenState
   , _pc          = 0
   }
 
-executeBlock :: Block -> Evm ()
+executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
   env %= (M.empty :)
   mapM_ codegenTop' stmts
   env %= tail
 
-updateCtx :: (Context -> Context) -> Evm ()
-updateCtx f =
-  env %= (\(ctx:xs) -> (f ctx:xs))
-
-assign :: PrimType -> Name -> Integer -> Evm ()
+assign
+  :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m)
+  => PrimType
+  -> Name
+  -> Integer
+  -> m ()
 assign tyR name addr =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
@@ -67,43 +99,7 @@ assign tyR name addr =
       storeAddressed (sizeof tyL) addr oldAddr
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
 
-lookup :: String -> Evm VariableStatus
-lookup name =
-  go =<< use env
-  where
-    go :: [Context] -> Evm VariableStatus
-    go [] = return NotDeclared
-    go (ctx:xs) =
-      case M.lookup name ctx of
-        Just (TFun retTy, FunAddr funAddr retAddr)   -> return (FunDef retTy funAddr retAddr)
-        Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
-        Nothing -> go xs
-      where
-        decideVar (ty, Nothing)   = return (Decl ty)
-        decideVar (ty, Just addr) = return (Def ty addr)
-
-        decide :: Maybe (PrimType, Maybe Integer) -> Maybe (PrimType, Maybe Integer) -> Evm VariableStatus
-        decide Nothing                   Nothing                = return NotDeclared
-        decide Nothing                   (Just (ty, Nothing))   = return $ Decl ty
-        decide Nothing                   (Just (ty, Just val))  = return $ Def ty val
-        decide (Just (ty, Nothing))      Nothing                = return $ Decl ty
-        decide (Just (_ty1, Nothing))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-        decide (Just (ty1, Nothing))     (Just (ty2, Just val)) =
-          if ty1 == ty2
-             then return $ Def ty1 val
-             else throwError (ScopedTypeViolation name ty1 ty2)
-        decide (Just (ty, Just val))      Nothing                = return $ Def ty val
-        decide (Just (_ty1, Just val))    (Just (_ty2, Nothing)) = throwError (VariableAlreadyDeclared name)
-        decide (Just (ty1, Just _))       (Just (ty2, Just val)) =
-          if ty1 == ty2
-             then return $ Def ty1 val -- Local value overrides
-             else throwError (ScopedTypeViolation name ty1 ty2)
-
-checkTyEq :: Name -> PrimType -> PrimType -> Evm ()
-checkTyEq name tyL tyR =
-  unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
-
-codegenTop :: Stmt -> Evm ()
+codegenTop :: CodegenM m => Stmt -> m ()
 codegenTop (STimes until block) = do
   -- Assign target value
   op2 PUSH32 until
@@ -229,20 +225,20 @@ codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
     where
-      executeFunBlock :: Block -> Evm Operand
+      executeFunBlock :: forall m. CodegenM m => Block -> m Operand
       executeFunBlock (Block stmts) = do
         env %= (M.empty :)
         go stmts <* (env %= tail)
           where
-            go :: [Stmt] -> Evm Operand
+            go :: [Stmt] -> m Operand
             go []             = throwError NoReturnStatement
             go [SReturn expr] = codegenExpr expr
             go (stmt:xs)      = codegenTop' stmt >> go xs
 
 codegenTop (SExpr expr) = void (codegenExpr expr)
 
-estimateOffset :: Block -> Evm Integer
-estimateOffset block =
+estimateOffset :: (MonadError CodegenError m, MonadIO m, MonadState CodegenState m) => Block -> m Integer
+estimateOffset block = do
   get >>= liftIO . go block >>= eitherToError
     where
       go :: Block -> CodegenState -> IO (Either CodegenError Integer)
@@ -257,7 +253,8 @@ estimateOffset block =
             let diff = newPc - oldPc
             ((+ diff) <$> ) <$> go (Block xs) newState
 
-codegenExpr :: Expr -> Evm Operand
+type CodegenM m = (MonadIO m, MonadLogger m, OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+codegenExpr :: CodegenM m => Expr -> m Operand
 codegenExpr expr@(EIdentifier name) = do
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
@@ -309,10 +306,10 @@ codegenExpr expr@(EFunCall name) =
       return (Operand retTy retAddr)
     _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
 
-log :: Show a => T.Text -> a -> Evm ()
+log :: (Show a, MonadLogger m) => T.Text -> a -> m ()
 log desc k = logDebug $ "[" <> desc <> "]: " <> T.pack (show k)
 
-codegenTop' :: Stmt -> Evm ()
+codegenTop' :: CodegenM m => Stmt -> m ()
 codegenTop' stmt = do
   use env >>= log "env"
   codegenTop stmt

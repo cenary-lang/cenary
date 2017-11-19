@@ -81,18 +81,19 @@ pcCost = snd . toInstrCode
 pcCosts :: [Instruction] -> Integer
 pcCosts = sum . map pcCost
 
--- | Instructions other than JUMP and JUMPI increase PC by 1.
--- See equation (136) in paper http://gavwood.com/paper.pdf
-addBC :: Integer -> Evm ()
-addBC val =
-  byteCode <>= T.pack (printf "%064x" val)
+-- Class of monads that can run opcodes
+class Monad m => OpcodeM m where
+  op :: Instruction -> m ()
+  -- ^ Opcode without argument
+  op2 :: Instruction -> Integer -> m ()
+  -- ^ Opcode with exactly one argument
+  addBC :: Integer -> m ()
+  -- ^ Add bytecode
 
-op :: Instruction -> Evm ()
-op instr = do
-  let (opcode, pcIncr) = toInstrCode instr
-  pc += pcIncr
-  byteCode <>= T.pack (printf "%02x" opcode)
-
--- I forgot what this does after 10 minutes
-op2 :: Instruction -> Integer -> Evm ()
-op2 = curry ((op *** addBC) >>> uncurry (>>))
+instance OpcodeM Evm where
+  op instr = do
+    let (opcode, pcIncr) = toInstrCode instr
+    pc += pcIncr
+  op2 = curry ((op *** addBC) >>> uncurry (>>))
+  addBC val =
+    byteCode <>= T.pack (printf "%064x" val)
