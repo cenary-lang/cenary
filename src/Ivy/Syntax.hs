@@ -19,7 +19,7 @@ data PrimType =
   | TChar
   | TBool
   | TArray Length PrimType
-  | TFun PrimType -- Return type and its value's address
+  | TFun PrimType
   deriving (Eq, Show)
 
 data Stmt =
@@ -30,7 +30,7 @@ data Stmt =
   | STimes Integer Block
   | SIf Expr Block
   | SIfThenElse Expr Block Block
-  | SFunDef String Block PrimType
+  | SFunDef String [(PrimType, Name)] Block PrimType
   | SReturn Expr
   | SExpr Expr
   deriving (Eq, Show)
@@ -41,5 +41,5 @@ data Expr =
   | EBool Bool
   | EIdentifier Name
   | EBinop Op Expr Expr
-  | EFunCall String
+  | EFunCall String [Expr]
   deriving (Eq, Show)

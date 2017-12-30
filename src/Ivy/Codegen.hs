@@ -11,6 +11,7 @@ module Ivy.Codegen where
 import           Control.Applicative
 import           Control.Lens                   hiding (Context, assign, op)
 import           Control.Monad.Except
+import           Control.Arrow                  ((***))
 import           Control.Monad.Logger           hiding (logDebug, logInfo)
 import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State
@@ -33,12 +34,19 @@ import           Ivy.Syntax
 class ContextM m where
   updateCtx :: (Context -> Context) -> m ()
   lookup :: String -> m VariableStatus
+  createCtx :: m ()
+  popCtx :: m ()
+  updateSig :: Sig -> m ()
 
 instance ContextM Evm where
   updateCtx f =
-    env %= (\(ctx:xs) -> (f ctx:xs))
+    env %= (id *** updateCtx')
+      where
+        updateCtx' [] = []
+        updateCtx' (ctx:xs) = f ctx : xs
+
   lookup name =
-    go =<< use env
+    go =<< snd <$> use env
     where
       go :: [Context] -> Evm VariableStatus
       go [] = return NotDeclared
@@ -50,8 +58,11 @@ instance ContextM Evm where
         where
           decideVar (ty, Nothing)   = return (Decl ty)
           decideVar (ty, Just addr) = return (Def ty addr)
+  createCtx = env %= (id *** (M.empty :))
+  popCtx = env %= (id *** tail)
+  updateSig sig = env %= (const sig *** id)
 
--- | Class of monads that can perform a typechecking
+-- | Class of monads that can perform typechecking
 class TcM m where
   checkTyEq :: Name -> PrimType -> PrimType -> m ()
 
@@ -69,20 +80,11 @@ binOp t instr left right = do
   storeMultibyte (sizeof TInt)
   return (Operand t addr)
 
-initCodegenState :: CodegenState
-initCodegenState = CodegenState
-  { _byteCode    = ""
-  , _memPointers = initMemPointers
-  , _memory      = M.empty
-  , _env         = [M.empty]
-  , _pc          = 0
-  }
-
 executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
-  env %= (M.empty :)
-  mapM_ codegenTop' stmts
-  env %= tail
+  createCtx
+  mapM_ codegenTop stmts
+  popCtx
 
 assign
   :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m)
@@ -100,6 +102,21 @@ assign tyR name addr =
       checkTyEq name tyL tyR
       storeAddressed (sizeof tyL) addr oldAddr
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
+
+declVar
+  :: (MonadState CodegenState m, ContextM m, MonadError CodegenError m, MemoryM m)
+  => PrimType
+  -> Name
+  -> m ()
+declVar ty name =
+  lookup name >>= \case
+    Decl _ -> throwError (VariableAlreadyDeclared name)
+    Def _ _ -> throwError (VariableAlreadyDeclared name)
+    NotDeclared -> do
+      mb_addr <- case ty of
+          TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
+          _                 -> return Nothing
+      updateCtx (M.insert name (ty, VarAddr mb_addr))
 
 codegenTop :: CodegenM m => Stmt -> m ()
 codegenTop (STimes until block) = do
@@ -152,14 +169,7 @@ codegenTop stmt@(SArrAssignment name index val) = do
     Def other _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 
 codegenTop (SVarDecl ty name) =
-  lookup name >>= \case
-    Decl _ -> throwError (VariableAlreadyDeclared name)
-    Def _ _ -> throwError (VariableAlreadyDeclared name)
-    NotDeclared -> do
-      mb_addr <- case ty of
-          TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
-          _                 -> return Nothing
-      updateCtx (M.insert name (ty, VarAddr mb_addr))
+  declVar ty name
 
 codegenTop (SDeclAndAssignment ty name val) = do
   codegenTop (SVarDecl ty name)
@@ -212,7 +222,7 @@ codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
 codegenTop (SReturn retExpr) =
   void (codegenExpr retExpr)
 
-codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
+codegenTop (SFunDef name args block@(Block body) retTyAnnot) = do
   offset <- estimateOffset block
   op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
   op PC
@@ -227,15 +237,19 @@ codegenTop (SFunDef name block@(Block body) retTyAnnot) = do
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
     where
+      sig :: Sig
+      sig = Sig name args retTyAnnot
+
       executeFunBlock :: forall m. CodegenM m => Block -> m Operand
       executeFunBlock (Block stmts) = do
-        env %= (M.empty :)
-        go stmts <* (env %= tail)
+        oldSig <- fst <$> use env
+        updateSig sig >> createCtx
+        go stmts <* (updateSig oldSig >> popCtx)
           where
             go :: [Stmt] -> m Operand
             go []             = throwError NoReturnStatement
             go [SReturn expr] = codegenExpr expr
-            go (stmt:xs)      = codegenTop' stmt >> go xs
+            go (stmt:xs)      = codegenTop stmt >> go xs
 
 codegenTop (SExpr expr) = void (codegenExpr expr)
 
@@ -294,7 +308,7 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpDiv -> binOp TInt DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
-codegenExpr expr@(EFunCall name) =
+codegenExpr expr@(EFunCall name args) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     FunDef retTy funAddr retAddr -> do
@@ -311,7 +325,3 @@ codegenExpr expr@(EFunCall name) =
 
       return (Operand retTy retAddr)
     _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
-
-codegenTop' :: CodegenM m => Stmt -> m ()
-codegenTop' stmt = do
-  codegenTop stmt

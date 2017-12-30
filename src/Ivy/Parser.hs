@@ -101,11 +101,16 @@ array = do
   char ']'
   return (TArray size type')
 
-varDecl :: Parser Stmt
-varDecl = do
+typedIdentifier :: Parser (PrimType, Name)
+typedIdentifier = do
   type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
+  return (type', name)
+
+varDecl :: Parser Stmt
+varDecl = do
+  (type', name) <- typedIdentifier
   return $ SVarDecl type' name
   <?> "variable declaration"
 
@@ -180,17 +185,19 @@ eFunDef = do
   name <- identifier
   whitespace
   char '('
+  args <- commaSep typedIdentifier
   char ')'
   body <- curlied block
-  return (SFunDef name body retType)
+  return (SFunDef name args body retType)
   <?> "function definition"
 
 eFunCall :: Parser Expr
 eFunCall = do
   name <- identifier
   char '('
+  args <- commaSep expr
   char ')'
-  return (EFunCall name)
+  return (EFunCall name args)
   <?> "function call"
 
 eIf :: Parser Stmt

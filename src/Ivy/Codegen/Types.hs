@@ -73,11 +73,17 @@ data Size =
   | Size_32
   deriving (Show, Eq, Ord)
 
+type ParamBaseAddrs = (Integer,     Integer)
+                  -- ^ Param count, Base address
+
 data Address = VarAddr (Maybe Integer)
+             -- ^      Variable adress
              | FunAddr Integer Integer
+             -- ^      PC      Return addr
              deriving Show
 
-type Env = [Context] -- A stack
+data Sig = Sig String [(PrimType, String)] PrimType
+type Env = (Sig, [Context]) -- A stack
 type Context = M.Map String (PrimType, Address)
 
 data MemBlock = MemBlock
@@ -90,11 +96,11 @@ makeLenses ''MemBlock
 type MemPointers = M.Map Size MemBlock
 
 data CodegenState = CodegenState
-  { _byteCode    :: !T.Text
-  , _memPointers :: !MemPointers
-  , _env         :: !Env
-  , _memory      :: !(M.Map Integer Integer)
-  , _pc          :: Integer
+  { _byteCode     :: !T.Text
+  , _memPointers  :: !MemPointers
+  , _env          :: !Env
+  , _memory       :: !(M.Map Integer Integer)
+  , _pc           :: Integer
   }
 
 makeLenses ''CodegenState
