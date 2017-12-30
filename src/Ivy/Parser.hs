@@ -65,9 +65,9 @@ expr = buildExpressionParser binops expr'
          <?>  "factor"
 
 stmt :: Parser Stmt
-stmt = try declAndAssignment
+stmt =
+  try declAndAssignment
    <|> try times
-   <|> try eFunDef
    <|> try varDecl
    <|> try arrAssignment
    <|> try assignment
@@ -76,6 +76,12 @@ stmt = try declAndAssignment
    <|> try sExpr
    <|> eIf
    <?> "Statement"
+
+anyStmt :: Parser AnyStmt
+anyStmt =
+   try (FundefStmt <$> eFunDef)
+   <|> (Stmt <$> stmt)
+   <?> "Any Statement"
 
 sExpr :: Parser Stmt
 sExpr = SExpr <$> expr
@@ -101,11 +107,16 @@ array = do
   char ']'
   return (TArray size type')
 
-varDecl :: Parser Stmt
-varDecl = do
+typedIdentifier :: Parser (PrimType, Name)
+typedIdentifier = do
   type' <- try array <|> typeAnnot
   whitespace
   name <- identifier
+  return (type', name)
+
+varDecl :: Parser Stmt
+varDecl = do
+  (type', name) <- typedIdentifier
   return $ SVarDecl type' name
   <?> "variable declaration"
 
@@ -173,24 +184,27 @@ eIfThenElse = do
   return (SIfThenElse pred tBody eBody)
   <?> "if then else"
 
-eFunDef :: Parser Stmt
+eFunDef :: Parser SFunDef
 eFunDef = do
   retType <- try array <|> typeAnnot
   whitespace
   name <- identifier
   whitespace
   char '('
+  args <- commaSep typedIdentifier
   char ')'
+  whitespace
   body <- curlied block
-  return (SFunDef name body retType)
+  return (SFunDef name args body retType)
   <?> "function definition"
 
 eFunCall :: Parser Expr
 eFunCall = do
   name <- identifier
   char '('
+  args <- commaSep expr
   char ')'
-  return (EFunCall name)
+  return (EFunCall name args)
   <?> "function call"
 
 eIf :: Parser Stmt
@@ -206,8 +220,13 @@ topLevel =
   many (stmt <* reserved ";")
   <?> "topLevel"
 
-parse :: T.Text -> Either ParseError Stmt
-parse = T.unpack >>> P.parse stmt "<stmt-toplevel>"
+topLevelAny :: Parser [AnyStmt]
+topLevelAny =
+  many (anyStmt <* reserved ";")
+  <?> "topLevelAny"
 
-parseTopLevel :: T.Text -> Either ParseError [Stmt]
-parseTopLevel = T.unpack >>> P.parse topLevel "<stmt-toplevel>"
+parse :: T.Text -> Either ParseError AnyStmt
+parse = T.unpack >>> P.parse anyStmt "<stmt-toplevel>"
+
+parseTopLevel :: T.Text -> Either ParseError [AnyStmt]
+parseTopLevel = T.unpack >>> P.parse topLevelAny "<stmt-toplevel>"

@@ -1,8 +1,5 @@
-bool makeWow (){
-  int b = 5;
-  return false;
+int wow (int a, int b, int c) {
+  return c + 3;
 };
 
-if(makeWow()) {
-  int b = 6;
-};
+int final = 9 + wow(5, 3, 100);

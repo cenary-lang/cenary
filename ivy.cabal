@@ -9,10 +9,9 @@ license:             MIT
 license-file:        LICENSE
 author:              Yiğit Özkavcı
 maintainer:          yigitozkavci8@gmail.com
--- copyright:           
 category:            Network
 build-type:          Simple
-extra-source-files:  ChangeLog.md, README.md
+extra-source-files:  README.md
 cabal-version:       >=1.10
 
 source-repository head
@@ -37,7 +36,8 @@ executable ivy
     text,
     TypeCompose,
     pretty-simple,
-    either
+    either,
+    errors
   other-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
