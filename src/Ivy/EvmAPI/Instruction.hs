@@ -94,6 +94,7 @@ instance OpcodeM Evm where
   op instr = do
     let (opcode, pcIncr) = toInstrCode instr
     pc += pcIncr
+    byteCode <>= T.pack (printf "%02x" opcode)
   op2 = curry ((op *** addBC) >>> uncurry (>>))
   addBC val =
     byteCode <>= T.pack (printf "%064x" val)
