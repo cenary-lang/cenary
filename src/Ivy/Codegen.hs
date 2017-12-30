@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TupleSections #-}
 
 module Ivy.Codegen where
 
@@ -245,8 +246,21 @@ estimateOffset block =
 -- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
 
+registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
+registerFunction name args = do
+  allocatedArgs <- mapM allocArg args
+  funcRegistry %= M.insert name allocatedArgs
+    where
+      allocArg :: (PrimType, Name) -> m (PrimType, Name, Integer)
+      allocArg (ty, name) = do
+        addr <- alloc (sizeof ty)
+        declVar ty name
+        assign ty name addr
+        return (ty, name, addr)
+
 codegenFunDef :: CodegenM m => SFunDef -> m ()
 codegenFunDef (SFunDef name args block@(Block body) retTyAnnot) = do
+  registerFunction name args
   offset <- estimateOffset block
   op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
   op PC
@@ -266,17 +280,49 @@ codegenFunDef (SFunDef name args block@(Block body) retTyAnnot) = do
 
       executeFunBlock :: forall m. CodegenM m => Block -> m Operand
       executeFunBlock (Block stmts) = do
-        oldSig <- fst <$> use env
-        updateSig sig >> createCtx
-        go stmts <* (updateSig oldSig >> popCtx)
+        go stmts
           where
             go :: [Stmt] -> m Operand
             go []             = throwError NoReturnStatement
             go [SReturn expr] = codegenExpr expr
             go (stmt:xs)      = codegenStmt stmt >> go xs
 
+takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
+takeArgsToContext funcName registryArgs callerArgs = do
+  unless (length registryArgs == length callerArgs) $
+    throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
+  mapM_ bindArg (zip registryArgs callerArgs)
+    where
+      bindArg :: ((PrimType, String, Integer), Operand) -> m ()
+      bindArg ((registryTy, registryName, registryAddr), Operand callerTy callerAddr) = do
+        checkTyEq registryName registryTy callerTy
+        storeAddressed (sizeof callerTy) callerAddr registryAddr
 
 codegenExpr :: CodegenM m => Expr -> m Operand
+codegenExpr expr@(EFunCall name args) = do
+  registry <- use funcRegistry
+  case M.lookup name registry of
+    Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
+    Just registryArgs -> takeArgsToContext name registryArgs =<< mapM codegenExpr args
+
+  lookup name >>= \case
+    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
+    FunDef retTy funAddr retAddr -> do
+      -- Preparing checkpoint
+      op PC
+      pc' <- use pc
+      op2 PUSH32 (pcCosts [PUSH32, JUMP, PUSH32, JUMP, JUMPDEST])
+      op ADD
+
+      -- Jumping to function
+      -- op2 PUSH32 (pc' + pcCosts [PC, PUSH32, JUMP])
+      op2 PUSH32 funAddr
+      op JUMP
+      op JUMPDEST
+
+      return (Operand retTy retAddr)
+    _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
+
 codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
@@ -309,21 +355,3 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
-
-codegenExpr expr@(EFunCall name args) =
-  lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
-    FunDef retTy funAddr retAddr -> do
-      -- Preparing checkpoint
-      op PC
-      pc' <- use pc
-      op2 PUSH32 (pcCosts [PUSH32, JUMP, PUSH32, JUMP, JUMPDEST])
-      op ADD
-
-      -- Jumping to function
-      op2 PUSH32 (pc' + pcCosts [PC, PUSH32, JUMP])
-      op JUMP
-      op JUMPDEST
-
-      return (Operand retTy retAddr)
-    _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."

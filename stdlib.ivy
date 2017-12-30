@@ -1,3 +1,5 @@
-int wow () {
-  return 5;
+int wow (int a, int b, int c) {
+  return c + 3;
 };
+
+int final = 9 + wow(5, 3, 100);

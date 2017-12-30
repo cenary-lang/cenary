@@ -35,6 +35,7 @@ data CodegenError =
   | ScopedTypeViolation String PrimType PrimType
   | InternalError String
   | WrongOperandTypes PrimType PrimType
+  | FuncArgLengthMismatch String Int Int
   | NoReturnStatement
 
 type Addr = Integer
@@ -63,6 +64,14 @@ instance Show CodegenError where
                                    <> " but a value of type "
                                    <> show tyR
                                    <> " is provided."
+
+  show (FuncArgLengthMismatch name expected given) = "Function "
+                                                  <> name
+                                                  <> " expected "
+                                                  <> show expected
+                                                  <> " arguments, but you have given "
+                                                  <> show given
+
   show NoReturnStatement = "Functions should have return statement as their last statement"
 
 data Size =
@@ -95,12 +104,15 @@ makeLenses ''MemBlock
 
 type MemPointers = M.Map Size MemBlock
 
+type FuncRegistry = M.Map String [(PrimType, String, Integer)]
+
 data CodegenState = CodegenState
-  { _byteCode     :: !T.Text
-  , _memPointers  :: !MemPointers
-  , _env          :: !Env
-  , _memory       :: !(M.Map Integer Integer)
-  , _pc           :: Integer
+  { _byteCode         :: !T.Text
+  , _memPointers      :: !MemPointers
+  , _env              :: !Env
+  , _memory           :: !(M.Map Integer Integer)
+  , _pc               :: Integer
+  , _funcRegistry     :: FuncRegistry
   }
 
 makeLenses ''CodegenState

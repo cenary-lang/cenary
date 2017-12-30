@@ -92,11 +92,12 @@ initEnv _userAddr = (Sig "main" [] S.TInt, [M.empty])
 initCodegenState :: CodegenState
 initCodegenState =
   CodegenState
-    { _byteCode    = ""
-    , _memPointers = initMemPointers
-    , _memory      = M.empty
-    , _env         = initEnv 0 -- TODO: Address of the deployer comes here.
-    , _pc          = 0
+    { _byteCode         = ""
+    , _memPointers      = initMemPointers
+    , _memory           = M.empty
+    , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
+    , _pc               = 0
+    , _funcRegistry     = M.empty
     }
 
 main :: IO ()
