@@ -220,8 +220,13 @@ topLevel =
   many (stmt <* reserved ";")
   <?> "topLevel"
 
-parse :: T.Text -> Either ParseError Stmt
-parse = T.unpack >>> P.parse stmt "<stmt-toplevel>"
+topLevelAny :: Parser [AnyStmt]
+topLevelAny =
+  many (anyStmt <* reserved ";")
+  <?> "topLevelAny"
 
-parseTopLevel :: T.Text -> Either ParseError [Stmt]
-parseTopLevel = T.unpack >>> P.parse topLevel "<stmt-toplevel>"
+parse :: T.Text -> Either ParseError AnyStmt
+parse = T.unpack >>> P.parse anyStmt "<stmt-toplevel>"
+
+parseTopLevel :: T.Text -> Either ParseError [AnyStmt]
+parseTopLevel = T.unpack >>> P.parse topLevelAny "<stmt-toplevel>"

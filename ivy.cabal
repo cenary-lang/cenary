@@ -36,7 +36,8 @@ executable ivy
     text,
     TypeCompose,
     pretty-simple,
-    either
+    either,
+    errors
   other-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,

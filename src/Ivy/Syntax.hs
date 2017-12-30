@@ -35,10 +35,12 @@ data Stmt =
   deriving (Eq, Show)
 
 data SFunDef = SFunDef String [(PrimType, Name)] Block PrimType
+  deriving (Eq, Show)
 
 data AnyStmt =
     FundefStmt SFunDef
   | Stmt Stmt
+  deriving (Eq, Show)
 
 data Expr =
     EInt Integer
