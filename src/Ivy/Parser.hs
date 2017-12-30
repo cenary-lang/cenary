@@ -35,6 +35,11 @@ primBool =
     try (reserved "true" $> True)
     <|> (reserved "false" $> False)
 
+primString :: Parser Expr
+primString = do
+  str <- map EChar <$> stringLiteral
+  return (EArray (toInteger (length str)) str)
+
 eArray :: Parser Expr
 eArray = do
   elems <- curlied (commaSep ePrim)
@@ -44,6 +49,7 @@ ePrim :: Parser Expr
 ePrim = try primInt
     <|> try primChar
     <|> try primBool
+    <|> try primString
     <|> eArray
     <?> "primitive"
 
