@@ -151,7 +151,7 @@ codegenStmt stmt@(SArrAssignment name index val) = do
   Operand tyR addr <- codegenExpr val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
-    Decl _tyL -> throwError $ InternalError "codegenStmt ArrAssignment: array type variable is in Def state"
+    Decl _tyL -> throwError (NonInitializedArrayAccess name)
     Def (TArray length aTy) oldAddr -> do
       checkTyEq name aTy tyR
 

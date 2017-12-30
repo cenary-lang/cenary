@@ -38,6 +38,7 @@ data CodegenError =
   | FuncArgLengthMismatch String Int Int
   | ArrayElementsTypeMismatch PrimType PrimType
   | EmptyArrayValue
+  | NonInitializedArrayAccess String
   | NoReturnStatement
 
 type Addr = Integer
@@ -82,6 +83,7 @@ instance Show CodegenError where
 
   show (ArrayElementsTypeMismatch ty1 ty2) = "Array has elements from different types: type " <> show ty1 <> " and type " <> show ty2
   show EmptyArrayValue = "Sorry! We can't handle type polymorphism right now, so you should not create empty arrays as right-hand-side values"
+  show (NonInitializedArrayAccess name) = "Array " <> name <> " is not initialized yet, and you wanted to access an element of it"
   show NoReturnStatement = "Functions should have return statement as their last statement"
 
 data Size =
