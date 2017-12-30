@@ -30,10 +30,15 @@ data Stmt =
   | STimes Integer Block
   | SIf Expr Block
   | SIfThenElse Expr Block Block
-  | SFunDef String [(PrimType, Name)] Block PrimType
   | SReturn Expr
   | SExpr Expr
   deriving (Eq, Show)
+
+data SFunDef = SFunDef String [(PrimType, Name)] Block PrimType
+
+data AnyStmt =
+    FundefStmt SFunDef
+  | Stmt Stmt
 
 data Expr =
     EInt Integer

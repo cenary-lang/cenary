@@ -36,6 +36,7 @@ instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Codegen Error: " <> show err
 
+-- | These 3 functions should be refactored with StateT monad transformer.
 codegenFundefs :: (CodegenState, [S.Stmt]) -> ExceptT Error IO (CodegenState, [S.Stmt])
 codegenFundefs = undefined
 
@@ -47,7 +48,7 @@ codegen initState stmts = do
 codegen' :: (CodegenState, [S.Stmt]) -> ExceptT Error IO T.Text
 codegen' (_, []) = return ""
 codegen' (state, e:ex) = do
-  let result = execStateT (runEvm (C.codegenTop e)) state
+  let result = execStateT (runEvm (C.codegenStmt e)) state
   case result of
     Left (Codegen -> err)       -> throwError err
     Right newState ->

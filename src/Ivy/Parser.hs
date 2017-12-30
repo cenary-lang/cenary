@@ -65,9 +65,9 @@ expr = buildExpressionParser binops expr'
          <?>  "factor"
 
 stmt :: Parser Stmt
-stmt = try declAndAssignment
+stmt =
+  try declAndAssignment
    <|> try times
-   <|> try eFunDef
    <|> try varDecl
    <|> try arrAssignment
    <|> try assignment
@@ -76,6 +76,13 @@ stmt = try declAndAssignment
    <|> try sExpr
    <|> eIf
    <?> "Statement"
+
+
+anyStmt :: Parser AnyStmt
+anyStmt =
+   (FundefStmt <$> eFunDef)
+   <|> (Stmt <$> stmt)
+   <?> "Any Statement"
 
 sExpr :: Parser Stmt
 sExpr = SExpr <$> expr
@@ -178,7 +185,7 @@ eIfThenElse = do
   return (SIfThenElse pred tBody eBody)
   <?> "if then else"
 
-eFunDef :: Parser Stmt
+eFunDef :: Parser SFunDef
 eFunDef = do
   retType <- try array <|> typeAnnot
   whitespace

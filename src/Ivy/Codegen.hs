@@ -83,7 +83,7 @@ binOp t instr left right = do
 executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
   createCtx
-  mapM_ codegenTop stmts
+  mapM_ codegenStmt stmts
   popCtx
 
 assign
@@ -118,8 +118,8 @@ declVar ty name =
           _                 -> return Nothing
       updateCtx (M.insert name (ty, VarAddr mb_addr))
 
-codegenTop :: CodegenM m => Stmt -> m ()
-codegenTop (STimes until block) = do
+codegenStmt :: CodegenM m => Stmt -> m ()
+codegenStmt (STimes until block) = do
   -- Assign target value
   op2 PUSH32 until
   op JUMPDEST
@@ -143,17 +143,17 @@ codegenTop (STimes until block) = do
   op SWAP2
   op JUMPI
 
-codegenTop (SAssignment name val) = do
+codegenStmt (SAssignment name val) = do
   Operand tyR addr <- codegenExpr val
   assign tyR name addr
 
-codegenTop stmt@(SArrAssignment name index val) = do
+codegenStmt stmt@(SArrAssignment name index val) = do
   Operand tyI iAddr <- codegenExpr index
   checkTyEq ("index_of_" <> name) TInt tyI
   Operand tyR addr <- codegenExpr val
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
-    Decl _tyL -> throwError $ InternalError "codegenTop ArrAssignment: array type variable is in Def state"
+    Decl _tyL -> throwError $ InternalError "codegenStmt ArrAssignment: array type variable is in Def state"
     Def (TArray length aTy) oldAddr -> do
       checkTyEq name aTy tyR
 
@@ -166,16 +166,16 @@ codegenTop stmt@(SArrAssignment name index val) = do
       op ADD
 
       storeMultibyte (sizeof aTy)
-    Def other _ -> throwError $ InternalError "codegenTop ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
+    Def other _ -> throwError $ InternalError "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
 
-codegenTop (SVarDecl ty name) =
+codegenStmt (SVarDecl ty name) =
   declVar ty name
 
-codegenTop (SDeclAndAssignment ty name val) = do
-  codegenTop (SVarDecl ty name)
-  codegenTop (SAssignment name val)
+codegenStmt (SDeclAndAssignment ty name val) = do
+  codegenStmt (SVarDecl ty name)
+  codegenStmt (SAssignment name val)
 
-codegenTop (SIf ePred bodyBlock) = do
+codegenStmt (SIf ePred bodyBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
 
@@ -191,7 +191,7 @@ codegenTop (SIf ePred bodyBlock) = do
   void $ executeBlock bodyBlock
   op JUMPDEST
 
-codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
+codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
@@ -219,10 +219,34 @@ codegenTop (SIfThenElse ePred trueBlock falseBlock) = do
   executeBlock falseBlock
   op JUMPDEST
 
-codegenTop (SReturn retExpr) =
+codegenStmt (SReturn retExpr) =
   void (codegenExpr retExpr)
 
-codegenTop (SFunDef name args block@(Block body) retTyAnnot) = do
+codegenStmt (SExpr expr) = void (codegenExpr expr)
+
+estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
+estimateOffset block =
+  get >>= eitherToError . go block
+    where
+      go :: Block -> CodegenState -> Either CodegenError Integer
+      go (Block []) state = Right 0
+      go (Block (stmt:xs)) state =
+        let oldPc = _pc state
+            result = execStateT (runEvm (codegenStmt stmt)) state
+        in
+          case result of
+            Left err -> Left err
+            Right newState -> do
+              let newPc = _pc newState
+              let diff = newPc - oldPc
+              (+ diff) <$> go (Block xs) newState
+
+-- | This type alias will be used for top-level codegen, since
+-- at top level we use all contexts
+type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+
+codegenFunDef :: CodegenM m => SFunDef -> m ()
+codegenFunDef (SFunDef name args block@(Block body) retTyAnnot) = do
   offset <- estimateOffset block
   op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
   op PC
@@ -249,30 +273,8 @@ codegenTop (SFunDef name args block@(Block body) retTyAnnot) = do
             go :: [Stmt] -> m Operand
             go []             = throwError NoReturnStatement
             go [SReturn expr] = codegenExpr expr
-            go (stmt:xs)      = codegenTop stmt >> go xs
+            go (stmt:xs)      = codegenStmt stmt >> go xs
 
-codegenTop (SExpr expr) = void (codegenExpr expr)
-
-estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
-estimateOffset block =
-  get >>= eitherToError . go block
-    where
-      go :: Block -> CodegenState -> Either CodegenError Integer
-      go (Block []) state = Right 0
-      go (Block (stmt:xs)) state =
-        let oldPc = _pc state
-            result = execStateT (runEvm (codegenTop stmt)) state
-        in
-          case result of
-            Left err -> Left err
-            Right newState -> do
-              let newPc = _pc newState
-              let diff = newPc - oldPc
-              (+ diff) <$> go (Block xs) newState
-
--- | This type alias will be used for top-level codegen, since
--- at top level we use all contexts
-type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
 
 codegenExpr :: CodegenM m => Expr -> m Operand
 codegenExpr expr@(EIdentifier name) =
