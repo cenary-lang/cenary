@@ -12,6 +12,7 @@ import           Control.Monad.State
 import           Control.Monad.Writer
 import qualified Data.Text              as T
 import           Text.Printf
+import           Prelude hiding (LT, EQ, GT)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 import qualified Ivy.Syntax             as S
@@ -24,6 +25,9 @@ data Instruction =
   | SUB
   | DIV
   | MOD
+  | GT
+  | LT
+  | EQ
   | ISZERO
   | POP
   | MLOAD
@@ -55,6 +59,9 @@ toInstrCode MUL      = (0x02, 1)
 toInstrCode SUB      = (0x03, 1)
 toInstrCode DIV      = (0x04, 1)
 toInstrCode MOD      = (0x06, 1)
+toInstrCode GT       = (0x11, 1)
+toInstrCode LT       = (0x10, 1)
+toInstrCode EQ       = (0x14, 1)
 toInstrCode ISZERO   = (0x15, 1)
 toInstrCode POP      = (0x50, 1)
 toInstrCode MLOAD    = (0x51, 1)

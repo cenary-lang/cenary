@@ -65,6 +65,10 @@ binops = [ [ binary "*" OpMul AssocLeft
          , [ binary "+" OpAdd AssocLeft
            , binary "-" OpSub AssocLeft
            ]
+         , [ binary ">" OpGt AssocLeft
+           , binary "<" OpLt AssocLeft
+           , binary "==" OpEq AssocLeft
+           ]
          ]
 
 expr :: Parser Expr
@@ -142,7 +146,7 @@ curlied p = reserved "{" *> p <* reserved "}"
 times :: Parser Stmt
 times = do
   until <- integer
-  symbol "."
+  char '.'
   reserved "times"
   reserved "do"
   body <- block

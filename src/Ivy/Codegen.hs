@@ -22,7 +22,7 @@ import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
-import           Prelude                        hiding (log, lookup)
+import           Prelude                        hiding (log, lookup, LT, EQ, GT)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -352,6 +352,9 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
         OpMod -> binOp TInt MOD left right
+        OpGt -> binOp TBool GT left right
+        OpLt -> binOp TBool LT left right
+        OpEq -> binOp TBool EQ left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
 codegenExpr (EArray len elemExprs) = do

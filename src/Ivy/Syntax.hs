@@ -11,6 +11,9 @@ data Op =
   | OpSub
   | OpDiv
   | OpMod
+  | OpGt
+  | OpLt
+  | OpEq
   deriving (Eq, Show)
 
 type Length = Integer
