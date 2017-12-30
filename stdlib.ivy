@@ -1,5 +1,16 @@
-int even(int val) {
-  return val % 2;
+bool even(int val) {
+  return val % 2 == 0;
 };
+
+char[5] vals = "yigit";
+char[5] result = "     ";
+
+int iterator = 0;
+int index = 0;
+
+6.times do
+  result[iterator] = vals[iterator];
+  iterator = iterator + 1;
+endtimes;
 
 char[5] wowname = "yigit";

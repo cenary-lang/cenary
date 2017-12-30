@@ -78,6 +78,7 @@ expr = buildExpressionParser binops expr'
     expr' = try (parens expr <?> "parens")
          <|> try ePrim
          <|> try eFunCall
+         <|> try eArrIdentifier
          <|> eIdentifier
          <?>  "factor"
 
@@ -190,6 +191,14 @@ eIdentifier =
   EIdentifier
     <$> identifier
     <?> "identifier"
+
+eArrIdentifier :: Parser Expr
+eArrIdentifier = do
+  name <- identifier
+  char '['
+  index <- expr
+  char ']'
+  return (EArrIdentifier name index)
 
 eIfThenElse :: Parser Stmt
 eIfThenElse = do

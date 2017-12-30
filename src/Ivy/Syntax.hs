@@ -17,6 +17,7 @@ data Op =
   deriving (Eq, Show)
 
 type Length = Integer
+type Index = Integer
 
 data PrimType =
     TInt
@@ -51,6 +52,7 @@ data Expr =
   | EChar Char
   | EBool Bool
   | EIdentifier Name
+  | EArrIdentifier Name Expr
   | EBinop Op Expr Expr
   | EFunCall String [Expr]
   | EArray Length [Expr]

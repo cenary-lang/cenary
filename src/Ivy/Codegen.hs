@@ -326,6 +326,16 @@ codegenExpr expr@(EIdentifier name) =
     Decl _ -> throwError (VariableNotDefined name)
     Def ty addr -> return (Operand ty addr)
 
+codegenExpr expr@(EArrIdentifier name index) =
+  lookup name >>= \case
+    NotDeclared -> throwError (VariableNotDeclared name (TextDetails "in array assignment"))
+    Decl _ -> throwError (VariableNotDefined name)
+    Def (TArray _ ty) addr -> do
+      Operand indexTy indexAddr <- codegenExpr index
+      checkTyEq name TInt indexTy
+      return (Operand ty addr)
+    Def ty _ -> throwError (IllegalArrAccess name ty)
+
 codegenExpr (EInt val) = do
   addr <- alloc (sizeof TInt)
   storeVal (sizeof TInt) val addr
