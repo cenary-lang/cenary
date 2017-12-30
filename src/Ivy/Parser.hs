@@ -77,11 +77,10 @@ stmt =
    <|> eIf
    <?> "Statement"
 
-
 anyStmt :: Parser AnyStmt
 anyStmt =
-   (FundefStmt <$> eFunDef)
-   <|> (Stmt <$> stmt)
+   try (FundefStmt <$> eFunDef)
+   <|> try (Stmt <$> stmt)
    <?> "Any Statement"
 
 sExpr :: Parser Stmt

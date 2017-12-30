@@ -39,11 +39,12 @@ instance Show Error where
   show (Codegen err) = "Codegen Error: " <> show err
 
 -- | These 3 functions should be refactored with StateT monad transformer.
-codegenFundef :: [S.SFunDef] -> Either Error CodegenState
-codegenFundef stmts = do
-  go initCodegenState stmts
+codegenFundef :: CodegenState -> [S.SFunDef] -> Either Error CodegenState
+codegenFundef initState stmts = do
+  go initState stmts
     where
       go :: CodegenState -> [S.SFunDef] -> Either Error CodegenState
+      go state [] = Right state
       go state (stmt:xs) =
         case execStateT (runEvm (C.codegenFunDef stmt)) state of
           Left (Codegen -> err) -> throwError err
@@ -55,7 +56,7 @@ codegen state = hoistEither . pureCodegen state
 pureCodegen :: CodegenState -> [S.AnyStmt] -> Either Error T.Text
 pureCodegen initState anyStmts = do
   let (stmts, fundefStmts) = splitStmts anyStmts
-  stateAfterFunctions <- codegenFundef fundefStmts
+  stateAfterFunctions <- codegenFundef initState fundefStmts
   codegen' (stateAfterFunctions, stmts)
   where
     splitStmts :: [S.AnyStmt] -> ([S.Stmt], [S.SFunDef])

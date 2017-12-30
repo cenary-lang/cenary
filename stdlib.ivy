@@ -1,5 +1,1 @@
-int makeWow (int b){
-  return b + 2;
-};
-
-int wowVar = makeWow(5);
+char b = 'c';
