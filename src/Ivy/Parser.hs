@@ -80,7 +80,7 @@ stmt =
 anyStmt :: Parser AnyStmt
 anyStmt =
    try (FundefStmt <$> eFunDef)
-   <|> try (Stmt <$> stmt)
+   <|> (Stmt <$> stmt)
    <?> "Any Statement"
 
 sExpr :: Parser Stmt
@@ -193,6 +193,7 @@ eFunDef = do
   char '('
   args <- commaSep typedIdentifier
   char ')'
+  whitespace
   body <- curlied block
   return (SFunDef name args body retType)
   <?> "function definition"
