@@ -36,10 +36,18 @@ data CodegenError =
   | InternalError String
   | WrongOperandTypes PrimType PrimType
   | FuncArgLengthMismatch String Int Int
+  | ArrayElementsTypeMismatch PrimType PrimType
+  | EmptyArrayValue
   | NoReturnStatement
 
 type Addr = Integer
-data Operand = Operand PrimType Addr
+
+data Operand = Operand
+  { _operandType :: PrimType
+  , _operandAddr :: Addr
+  }
+
+makeLenses ''Operand
 
 instance Show CodegenError where
   show (VariableNotDeclared var details) = "Variable " <> var <> " is not declared. Details: " ++ show details
@@ -72,6 +80,8 @@ instance Show CodegenError where
                                                   <> " arguments, but you have given "
                                                   <> show given
 
+  show (ArrayElementsTypeMismatch ty1 ty2) = "Array has elements from different types: type " <> show ty1 <> " and type " <> show ty2
+  show EmptyArrayValue = "Sorry! We can't handle type polymorphism right now, so you should not create empty arrays as right-hand-side values"
   show NoReturnStatement = "Functions should have return statement as their last statement"
 
 data Size =

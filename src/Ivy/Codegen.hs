@@ -114,10 +114,7 @@ declVar ty name =
     Decl _ -> throwError (VariableAlreadyDeclared name)
     Def _ _ -> throwError (VariableAlreadyDeclared name)
     NotDeclared -> do
-      mb_addr <- case ty of
-          TArray length aTy -> Just <$> allocBulk length (sizeof aTy)
-          _                 -> return Nothing
-      updateCtx (M.insert name (ty, VarAddr mb_addr))
+      updateCtx (M.insert name (ty, VarAddr Nothing))
 
 codegenStmt :: CodegenM m => Stmt -> m ()
 codegenStmt (STimes until block) = do
@@ -298,7 +295,7 @@ takeArgsToContext funcName registryArgs callerArgs = do
         checkTyEq registryName registryTy callerTy
         storeAddressed (sizeof callerTy) callerAddr registryAddr
 
-codegenExpr :: CodegenM m => Expr -> m Operand
+codegenExpr :: forall m. CodegenM m => Expr -> m Operand
 codegenExpr expr@(EFunCall name args) = do
   registry <- use funcRegistry
   case M.lookup name registry of
@@ -355,3 +352,22 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
+
+codegenExpr (EArray len elemExprs) = do
+  elems <- mapM codegenExpr elemExprs
+  elemTy <- testOperandsSameTy elems
+  addr <- allocBulk len (sizeof elemTy)
+  return (Operand (TArray len elemTy) addr)
+  where
+    testOperandsSameTy :: [Operand] -> m PrimType
+    testOperandsSameTy [] = throwError EmptyArrayValue
+    testOperandsSameTy (x:xs) =
+      testOperandsHasTy (x ^. operandType) xs
+
+    testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
+    testOperandsHasTy ty [] = return ty
+    testOperandsHasTy ty (x:xs) =
+      if x ^. operandType == ty
+        then testOperandsHasTy ty xs
+        else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
+

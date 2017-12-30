@@ -35,10 +35,16 @@ primBool =
     try (reserved "true" $> True)
     <|> (reserved "false" $> False)
 
-prims :: Parser Expr
-prims = try primInt
+eArray :: Parser Expr
+eArray = do
+  elems <- curlied (commaSep ePrim)
+  return (EArray (toInteger (length elems)) elems)
+
+ePrim :: Parser Expr
+ePrim = try primInt
     <|> try primChar
-    <|> primBool
+    <|> try primBool
+    <|> eArray
     <?> "primitive"
 
 term :: Parser Integer
@@ -59,7 +65,7 @@ expr = buildExpressionParser binops expr'
   where
     expr' :: Parser Expr
     expr' = try (parens expr <?> "parens")
-         <|> try prims
+         <|> try ePrim
          <|> try eFunCall
          <|> eIdentifier
          <?>  "factor"
@@ -99,8 +105,8 @@ typeAnnot =
   <|> reserved "bool" $> TBool
   <?> "type annotation"
 
-array :: Parser PrimType
-array = do
+tyArray :: Parser PrimType
+tyArray = do
   type' <- typeAnnot
   char '['
   size <- integer
@@ -109,7 +115,7 @@ array = do
 
 typedIdentifier :: Parser (PrimType, Name)
 typedIdentifier = do
-  type' <- try array <|> typeAnnot
+  type' <- try tyArray <|> typeAnnot
   whitespace
   name <- identifier
   return (type', name)
@@ -160,7 +166,7 @@ arrAssignment = do
 
 declAndAssignment :: Parser Stmt
 declAndAssignment = do
-  type' <- try array <|> typeAnnot
+  type' <- try tyArray <|> typeAnnot
   whitespace
   name <- identifier
   reserved "="
@@ -186,7 +192,7 @@ eIfThenElse = do
 
 eFunDef :: Parser SFunDef
 eFunDef = do
-  retType <- try array <|> typeAnnot
+  retType <- try tyArray <|> typeAnnot
   whitespace
   name <- identifier
   whitespace

@@ -49,4 +49,5 @@ data Expr =
   | EIdentifier Name
   | EBinop Op Expr Expr
   | EFunCall String [Expr]
+  | EArray Length [Expr]
   deriving (Eq, Show)
