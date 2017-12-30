@@ -23,6 +23,7 @@ data Instruction =
   | MUL
   | SUB
   | DIV
+  | MOD
   | ISZERO
   | POP
   | MLOAD
@@ -53,6 +54,7 @@ toInstrCode ADD      = (0x01, 1)
 toInstrCode MUL      = (0x02, 1)
 toInstrCode SUB      = (0x03, 1)
 toInstrCode DIV      = (0x04, 1)
+toInstrCode MOD      = (0x06, 1)
 toInstrCode ISZERO   = (0x15, 1)
 toInstrCode POP      = (0x50, 1)
 toInstrCode MLOAD    = (0x51, 1)

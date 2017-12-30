@@ -60,6 +60,7 @@ binary s opType = Infix (reservedOp s >> return (EBinop opType))
 
 binops = [ [ binary "*" OpMul AssocLeft
            , binary "/" OpDiv AssocLeft
+           , binary "%" OpMod AssocLeft
            ]
          , [ binary "+" OpAdd AssocLeft
            , binary "-" OpSub AssocLeft

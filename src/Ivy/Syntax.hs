@@ -10,6 +10,7 @@ data Op =
   | OpMul
   | OpSub
   | OpDiv
+  | OpMod
   deriving (Eq, Show)
 
 type Length = Integer

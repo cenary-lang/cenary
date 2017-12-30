@@ -351,6 +351,7 @@ codegenExpr (EBinop op expr1 expr2) = do
         OpMul -> binOp TInt MUL left right
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
+        OpMod -> binOp TInt MOD left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
 codegenExpr (EArray len elemExprs) = do

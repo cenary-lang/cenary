@@ -1,1 +1,5 @@
+int even(int val) {
+  return val % 2;
+};
+
 char[5] wowname = "yigit";
