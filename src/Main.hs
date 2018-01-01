@@ -94,7 +94,7 @@ initCodegenState =
   CodegenState
     { _byteCode         = ""
     , _memPointers      = initMemPointers
-    , _memory           = M.empty
+    , _memory           = initMemory
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
     , _funcRegistry     = M.empty

@@ -127,16 +127,7 @@ findMemspace
 findMemspace = do
   mem <- use memory
   let msize = fromIntegral $ M.size mem
-  case go (M.assocs mem) of
-    Nothing     -> (memory %= M.insert msize (0 :: Integer)) $> msize
-    Just result -> return result
-    where
-      go :: [(Integer, Integer)] -> Maybe Integer
-      go [] = Nothing
-      go ((index, alloc):xs) =
-        if alloc == 0
-           then Just index
-           else go xs
+  (memory %= M.insert msize (0 :: Integer)) $> msize
 
 calcAddr :: Integer -> Integer -> Integer
 calcAddr index allocLen = index * totalMemBlockSize + allocLen
@@ -197,6 +188,15 @@ initMemPointers = M.fromList
   , (Size_4, MemBlock 2 0)
   , (Size_8, MemBlock 3 0)
   , (Size_32, MemBlock 4 0)
+  ]
+
+initMemory :: M.Map Integer Integer
+initMemory = M.fromList
+  [ (0, 0)
+  , (1, 0)
+  , (2, 0)
+  , (3, 0)
+  , (4, 0)
   ]
 
 boolToInt :: Bool -> Integer
