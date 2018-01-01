@@ -23,6 +23,7 @@ import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
 import           Prelude                        hiding (log, lookup, LT, EQ, GT)
+import           Debug.Trace
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -73,12 +74,12 @@ instance TcM Evm where
 
 binOp :: (OpcodeM m, MemoryM m) => PrimType -> Instruction -> Integer -> Integer -> m Operand
 binOp t instr left right = do
-  load (sizeof TInt) left
   load (sizeof TInt) right
+  load (sizeof TInt) left
   op instr
-  addr <- alloc (sizeof TInt)
+  addr <- alloc (sizeof t)
   op2 PUSH32 addr
-  storeMultibyte (sizeof TInt)
+  storeMultibyte (sizeof t)
   return (Operand t addr)
 
 executeBlock :: CodegenM m => Block -> m ()
@@ -136,10 +137,57 @@ codegenStmt (STimes until block) = do
 
   -- Code body
   executeBlock block
+
   -- Jump to destination back if target value is nonzero
   op DUP1
   op SWAP2
   op JUMPI
+
+codegenStmt (SWhile pred block) = do
+  Operand predTy predAddr <- codegenExpr pred
+  checkTyEq "index_of_while_pred" TBool predTy
+
+  load (sizeof TBool) predAddr
+  op DUP1
+  op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
+
+  -- Don't enter the loop if predicate is already false
+  predOffset <- estimateOffsetExpr pred
+  blockOffset <- estimateOffset block
+
+  -- FIXME: This instruction set depends on implementation of `load` method. Find a way!
+  let costToWhile = pcCosts [PC, ADD, JUMPI, JUMPDEST, PC, PUSH32, SWAP1, SUB, SWAP1, POP, PUSH32, PUSH32, MLOAD, DIV, SWAP1, DUP1, SWAP2, SWAP1, JUMPI] + blockOffset + predOffset
+  op2 PUSH32 costToWhile
+  op PC
+  op ADD
+  op JUMPI
+
+  -- Loop start
+  op JUMPDEST
+
+  -- Prepare true value of current PC
+  op PC
+  op2 PUSH32 0x01
+  op SWAP1
+  op SUB
+
+  -- Code body
+  executeBlock block
+
+  -- Load predicate again
+  op SWAP1
+  op POP
+  Operand predTy' predAddr' <- codegenExpr pred
+  checkTyEq "index_of_while_pred" TBool predTy'
+  load (sizeof TBool) predAddr'
+  op SWAP1
+
+  -- Jump to destination back if target value is nonzero
+  op DUP1
+  op SWAP2
+  op SWAP1
+  op JUMPI
+  op JUMPDEST
 
 codegenStmt (SAssignment name val) = do
   Operand tyR addr <- codegenExpr val
@@ -221,6 +269,19 @@ codegenStmt (SReturn retExpr) =
   void (codegenExpr retExpr)
 
 codegenStmt (SExpr expr) = void (codegenExpr expr)
+
+estimateOffsetExpr :: (MonadError CodegenError m, MonadState CodegenState m) => Expr -> m Integer
+estimateOffsetExpr expr =
+  get >>= eitherToError . go expr
+    where
+      go :: Expr -> CodegenState -> Either CodegenError Integer
+      go expr state =
+        let oldPc = _pc state
+            result = execStateT (runEvm (codegenExpr expr)) state
+        in
+          case result of
+            Left err -> Left err
+            Right newState -> Right (_pc newState - oldPc)
 
 estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
 estimateOffset block =

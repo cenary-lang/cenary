@@ -86,13 +86,14 @@ stmt :: Parser Stmt
 stmt =
   try declAndAssignment
    <|> try times
+   <|> try while
    <|> try varDecl
    <|> try arrAssignment
    <|> try assignment
-   <|> try eIfThenElse
+   <|> try sIfThenElse
    <|> try sReturn
    <|> try sExpr
-   <|> eIf
+   <|> sIf
    <?> "Statement"
 
 anyStmt :: Parser AnyStmt
@@ -143,6 +144,13 @@ block = Block <$> topLevel
 
 curlied :: Parser a -> Parser a
 curlied p = reserved "{" *> p <* reserved "}"
+
+while :: Parser Stmt
+while = do
+  reserved "while"
+  pred <- expr
+  body <- curlied block
+  return (SWhile pred body)
 
 times :: Parser Stmt
 times = do
@@ -200,8 +208,8 @@ eArrIdentifier = do
   char ']'
   return (EArrIdentifier name index)
 
-eIfThenElse :: Parser Stmt
-eIfThenElse = do
+sIfThenElse :: Parser Stmt
+sIfThenElse = do
   reserved "if"
   pred <- expr
   tBody <- curlied block
@@ -233,8 +241,8 @@ eFunCall = do
   return (EFunCall name args)
   <?> "function call"
 
-eIf :: Parser Stmt
-eIf = do
+sIf :: Parser Stmt
+sIf = do
   reserved "if"
   pred <- expr
   body <- curlied block

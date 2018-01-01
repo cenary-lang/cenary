@@ -33,6 +33,7 @@ data Stmt =
   | SAssignment Name Expr
   | SArrAssignment Name Expr Expr
   | STimes Integer Block
+  | SWhile Expr Block
   | SIf Expr Block
   | SIfThenElse Expr Block Block
   | SReturn Expr
