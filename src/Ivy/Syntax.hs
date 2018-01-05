@@ -25,7 +25,14 @@ data PrimType =
   | TBool
   | TArray Length PrimType
   | TFun PrimType
-  deriving (Eq, Show)
+  deriving Eq
+
+instance Show PrimType where
+  show TInt = "integer"
+  show TChar = "char"
+  show TBool = "boolean"
+  show (TArray _ ty) = show ty ++ " array"
+  show (TFun _ty) = "function"
 
 data Stmt =
     SVarDecl PrimType Name

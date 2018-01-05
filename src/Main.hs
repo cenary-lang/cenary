@@ -36,7 +36,7 @@ data Error =
 
 instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
-  show (Codegen err) = "Codegen Error: " <> show err
+  show (Codegen err) = "Compile Error: " <> show err
 
 -- | These 3 functions should be refactored with StateT monad transformer.
 codegenFundef :: CodegenState -> [S.SFunDef] -> Either Error CodegenState
