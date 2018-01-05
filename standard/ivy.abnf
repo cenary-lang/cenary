@@ -1,23 +1,54 @@
 ; ABNF Syntax for ivy, a programming language for ethereum virtual machine
 ; based on RFC 5234 (https://tools.ietf.org/html/rfc5234).
 
-equal          = "="  whitespace
+; Arithmetic operators
 plus           = "+"  whitespace
 minus          = "-"  whitespace
-times          = "*"  whitespace
+mul            = "*"  whitespace
 div            = "/"  whitespace
+mod            = "%"  whitespace
+
+; Comparison operators
+greater-than   = ">"  whitespace
+less-than      = "<"  whitespace
+equals         = "==" whitespace
+
+; Other operators
+equal          = "="   whitespace
+open-bracket   = "["  whitespace
+close-bracket  = "]"  whitespace
+open-parens    = "("  whitespace
+close-parens   = ")"  whitespace
+stmt-separator = ";"  whitespace
+stmt-end       = stmt-separator whitespace end-of-line
 line-comment   = "--" whitespace
 single-quote   = "'"  whitespace
-opening-bracket = "["
-closing-bracket = "]"
+dot            = "."
+curly-open     = "{" whitespace
+curly-close    = "}" whitespace
+comma          = "," whitespace
 
-operator =
-    plus
-  / minus
-  / times
-  / div
+; Hex characters for case senstivity
+; These char sequences can be generated with the following Haskell function:
+; 
+; convert :: String -> String
+; convert = ("%x" ++) . intercalate "." . map (flip showHex "" . ord)
+int      = %x69.6E.74
+char     = %x63.68.61.72
+bool     = %x62.6F.6F.6C
+while    = %x77.68.69.6C.65
+times    = %x74.69.6D.65.73
+endtimes = %x65.6E.64 times
+if       = %x69.66
+return   = %x72.65.74.75.72.6e
+else     = %x65.6c.73.65
+true     = %x74.72.75.65
+false    = %x66.61.6c.73.65
 
-tab = %x09 ; \t
+; Utilities
+end-of-line =
+    %x0A     ; "\n"
+  / %x0D.0A  ; "\r\n"
 
 ALPHA =
     %x41-5A ; [A-Z]
@@ -27,42 +58,80 @@ DIGIT = %x30-39 ; ASCII 0-9
 
 ALPHANUM = *(ALPHA / DIGIT)
 
+tab = %x09
 
 single-whitespace =
     " "
   / tab
+
 whitespace = *single-whitespace
 
-intType = %x69.6E.74 ; int
+operator =
+    plus
+  / minus
+  / mul
+  / div
+  / mod
+  / greater-than
+  / less-than
+  / equals
 
-charType = %x63.68.61.72 ; char
+prim-type =
+    int
+  / char
+  / bool
 
-primType = intType / charType
-
-arr-type = primType opening-bracket integer closing-bracket
+arr-type = prim-type open-bracket int-literal close-bracket
 
 type =
-    primType
+    prim-type
   / arr-type
 
-timesBegin = %x74.69.6D.65.73 ; times
-timesEnd = %x65.6E.64 timesBegin ; endtimes
+; Statements
+block               = curly-open end-of-line stmts curly-close whitespace stmt-end
+var-decl            = type identifier whitespace equal whitespace expr
+assignment          = identifier whitespace equal
+typed-assignment    = prim-type assignment
+decl-and-assignment = var-decl whitespace equal whitespace expr
+arr-assignment      = identifier open-bracket int-literal close-bracket whitespace equal expr
+binop               = expr whitespace operator expr
+times-stmt          = int-literal dot times block endtimes
+while-stmt          = while whitespace open-parens expr close-parens
+if-stmt             = if open-parens expr close-parens block
+if-then-else-stmt   = if-stmt else block
 
-integer       = *DIGIT
-char          = single-quote ALPHANUM single-quote
-identifier    = *ALPHA
-var-decl      = type identifier whitespace equal whitespace expr
-assignment    = identifier whitespace equal
-arrAssignment = identifier opening-bracket integer closing-bracket whitespace equal expr
-binop         = expr whitespace operator expr
-timesExpr     = integer "." timesBegin expr timesEnd
+stmt =
+    var-decl
+  / decl-and-assignment
+  / assignment
+  / arr-assignment
+  / times-stmt
+  / while-stmt
+  / if-stmt
+  / if-then-else-stmt
+  / return
+  / expr
+
+stmts =
+    stmt whitespace stmt-end
+  / stmt whitespace stmt-end stmts
+
+; Expressions
+int-literal       = *DIGIT
+char-literal      = single-quote ALPHANUM single-quote
+bool-literal      = true / false
+identifier        = *ALPHA
+arr-identifier    = identifier open-bracket expr close-bracket
+comma-sep-expr = expr / expr comma comma-sep-expr
+func-call         = identifier open-parens comma-sep-expr close-parens
+array-expr        = curly-open comma-sep-expr curly-close
 
 expr =
-    integer
-  / char
+    int-literal
+  / char-literal
+  / bool-literal
   / identifier
-  / var-decl
-  / assignment
-  / arrAssignment
+  / arr-identifier
   / binop
-  / timesExpr
+  / func-call
+  / array-expr
