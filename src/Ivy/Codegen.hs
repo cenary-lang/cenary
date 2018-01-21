@@ -142,6 +142,7 @@ codegenStmt (STimes until block) = do
   op DUP1
   op SWAP2
   op JUMPI
+  op POP
 
 codegenStmt (SWhile pred block) = do
   Operand predTy predAddr <- codegenExpr pred
