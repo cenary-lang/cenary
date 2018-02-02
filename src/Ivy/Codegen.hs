@@ -5,37 +5,41 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import           Control.Lens                   hiding (Context, assign, op)
+import Control.Comonad
+import           Control.Lens                   hiding (Context, assign, op, index)
 import           Control.Monad.Except
 import           Control.Arrow                  ((***))
 import           Control.Monad.Logger           hiding (logDebug, logInfo)
 import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
-import           Control.Monad.State
+import           Control.Monad.State hiding (state)
 import           Data.Char                      (ord)
 import           Data.Either.Combinators        (eitherToError)
 import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
-import           Prelude                        hiding (log, lookup, LT, EQ, GT)
+import           Prelude                        hiding (log, lookup, LT, EQ, GT, until, pred)
 import           Debug.Trace
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
-import           Ivy.Parser
+-- import           Ivy.Parser
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
 class ContextM m where
   updateCtx :: (Context -> Context) -> m ()
-  lookup :: String -> m VariableStatus
+  lookup :: String -> m (VariableStatus VarsVar)
+  lookupFun :: String -> m (VariableStatus VarsFun)
   createCtx :: m ()
   popCtx :: m ()
   updateSig :: Sig -> m ()
@@ -46,20 +50,26 @@ instance ContextM Evm where
       where
         updateCtx' [] = []
         updateCtx' (ctx:xs) = f ctx : xs
-
   lookup name =
     go =<< snd <$> use env
     where
-      go :: [Context] -> Evm VariableStatus
+      go :: [Context] -> Evm (VariableStatus VarsVar)
       go [] = return NotDeclared
       go (ctx:xs) =
         case M.lookup name ctx of
-          Just (TFun retTy, FunAddr funAddr retAddr)   -> return (FunDef retTy funAddr retAddr)
           Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
           Nothing -> go xs
         where
           decideVar (ty, Nothing)   = return (Decl ty)
           decideVar (ty, Just addr) = return (Def ty addr)
+  lookupFun name =
+    go =<< snd <$> use env
+      where
+        go [] = return NotDeclared
+        go (ctx:xs) =
+          case M.lookup name ctx of
+            Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
+            Nothing -> go xs
   createCtx = env %= (id *** (M.empty :))
   popCtx = env %= (id *** tail)
   updateSig sig = env %= (const sig *** id)
@@ -201,7 +211,7 @@ codegenStmt stmt@(SArrAssignment name index val) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL -> throwError (NonInitializedArrayAccess name)
-    Def (TArray length aTy) oldAddr -> do
+    Def (TArray _length aTy) oldAddr -> do
       checkTyEq name aTy tyR
 
       load (sizeof aTy) addr
@@ -213,7 +223,7 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       op ADD
 
       storeMultibyte (sizeof aTy)
-    Def other _ -> throwError $ InternalError "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation"
+    Def other _ -> throwError $ InternalError $ "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation: " <> show other
 
 codegenStmt (SVarDecl ty name) =
   declVar ty name
@@ -273,10 +283,10 @@ codegenStmt (SExpr expr) = void (codegenExpr expr)
 
 estimateOffsetExpr :: (MonadError CodegenError m, MonadState CodegenState m) => Expr -> m Integer
 estimateOffsetExpr expr =
-  get >>= eitherToError . go expr
+  get >>= eitherToError . go
     where
-      go :: Expr -> CodegenState -> Either CodegenError Integer
-      go expr state =
+      go :: CodegenState -> Either CodegenError Integer
+      go state =
         let oldPc = _pc state
             result = execStateT (runEvm (codegenExpr expr)) state
         in
@@ -289,7 +299,7 @@ estimateOffset block =
   get >>= eitherToError . go block
     where
       go :: Block -> CodegenState -> Either CodegenError Integer
-      go (Block []) state = Right 0
+      go (Block []) _ = Right 0
       go (Block (stmt:xs)) state =
         let oldPc = _pc state
             result = execStateT (runEvm (codegenStmt stmt)) state
@@ -311,14 +321,14 @@ registerFunction name args = do
   funcRegistry %= M.insert name allocatedArgs
     where
       allocArg :: (PrimType, Name) -> m (PrimType, Name, Integer)
-      allocArg (ty, name) = do
+      allocArg (ty, argName) = do
         addr <- alloc (sizeof ty)
-        declVar ty name
-        assign ty name addr
-        return (ty, name, addr)
+        declVar ty argName
+        assign ty argName addr
+        return (ty, argName, addr)
 
-codegenFunDef :: CodegenM m => SFunDef -> m ()
-codegenFunDef (SFunDef name args block@(Block body) retTyAnnot) = do
+codegenFunDef :: CodegenM m => FunStmt -> m ()
+codegenFunDef (FunStmt name args block retTyAnnot) = do
   registerFunction name args
   offset <- estimateOffset block
   op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
@@ -334,9 +344,6 @@ codegenFunDef (SFunDef name args block@(Block body) retTyAnnot) = do
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
     where
-      sig :: Sig
-      sig = Sig name args retTyAnnot
-
       executeFunBlock :: forall m. CodegenM m => Block -> m Operand
       executeFunBlock (Block stmts) = do
         go stmts
@@ -364,23 +371,20 @@ codegenExpr expr@(EFunCall name args) = do
     Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
     Just registryArgs -> takeArgsToContext name registryArgs =<< mapM codegenExpr args
 
-  lookup name >>= \case
+  lookupFun name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     FunDef retTy funAddr retAddr -> do
       -- Preparing checkpoint
       op PC
-      pc' <- use pc
       op2 PUSH32 (pcCosts [PUSH32, JUMP, PUSH32, JUMP, JUMPDEST])
       op ADD
 
       -- Jumping to function
-      -- op2 PUSH32 (pc' + pcCosts [PC, PUSH32, JUMP])
       op2 PUSH32 funAddr
       op JUMP
       op JUMPDEST
 
       return (Operand retTy retAddr)
-    _ -> throwError $ InternalError "Function call's name lookup is neither NotDeclared nor FunDef."
 
 codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
@@ -388,12 +392,12 @@ codegenExpr expr@(EIdentifier name) =
     Decl _ -> throwError (VariableNotDefined name)
     Def ty addr -> return (Operand ty addr)
 
-codegenExpr expr@(EArrIdentifier name index) =
+codegenExpr (EArrIdentifier name index) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "in array assignment"))
     Decl _ -> throwError (VariableNotDefined name)
     Def (TArray _ ty) addr -> do
-      Operand indexTy indexAddr <- codegenExpr index
+      Operand indexTy _ <- codegenExpr index
       checkTyEq name TInt indexTy
       return (Operand ty addr)
     Def ty _ -> throwError (IllegalArrAccess name ty)
@@ -413,12 +417,12 @@ codegenExpr (EBool val) = do
   storeVal (sizeof TBool) (boolToInt val) addr
   return (Operand TBool addr)
 
-codegenExpr (EBinop op expr1 expr2) = do
+codegenExpr (EBinop binop expr1 expr2) = do
   Operand ty1 left <- codegenExpr expr1
   Operand ty2 right <- codegenExpr expr2
   case (ty1, ty2) of
     (TInt, TInt) ->
-      case op of
+      case binop of
         OpAdd -> binOp TInt ADD left right
         OpMul -> binOp TInt MUL left right
         OpSub -> binOp TInt SUB left right
@@ -446,4 +450,3 @@ codegenExpr (EArray len elemExprs) = do
       if x ^. operandType == ty
         then testOperandsHasTy ty xs
         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
-

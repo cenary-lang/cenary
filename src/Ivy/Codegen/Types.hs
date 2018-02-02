@@ -4,16 +4,14 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE GADTs            #-}
 
 module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
-import           Control.Arrow
 import           Control.Lens                   hiding (Context)
 import           Control.Monad.Except
 import           Control.Monad.State
-import           Data.Functor                   (($>))
-import           Data.Functor.Identity
 import qualified Data.Map                       as M
 import           Data.Semigroup                 ((<>))
 import qualified Data.Text                      as T
@@ -136,9 +134,11 @@ newtype Evm a = Evm { runEvm :: StateT CodegenState (Either CodegenError) a }
 
 type ScopeLevel = Int
 
-data VariableStatus = NotDeclared
-                    | Decl PrimType
-                    | Def PrimType Integer
-                    | FunDef PrimType Integer Integer
-                    -- ^ FunDef retTy funAddr retAddr
-                    | Error CodegenError
+data VarsVar
+data VarsFun
+
+data VariableStatus a where
+  NotDeclared :: VariableStatus a
+  Decl        :: PrimType -> VariableStatus VarsVar
+  Def         :: PrimType -> Integer -> VariableStatus VarsVar
+  FunDef      :: PrimType -> Integer -> Integer -> VariableStatus VarsFun

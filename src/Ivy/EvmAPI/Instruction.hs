@@ -1,4 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Ivy.EvmAPI.Instruction where
 
@@ -9,10 +18,13 @@ import           Control.Monad.Except
 import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Lens hiding (op)
 import           Control.Monad.State
+import Data.Monoid
 import           Control.Monad.Writer
 import qualified Data.Text              as T
 import           Text.Printf
 import           Prelude hiding (LT, EQ, GT)
+import           GHC.TypeLits
+import Data.Proxy
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 import qualified Ivy.Syntax             as S
@@ -49,46 +61,85 @@ data Instruction =
   | LOG2
   | RETURN
   | ADDRESS
+  deriving Show
 
 type Opcode = Integer
 
+data StackUpdate :: Nat -> Nat -> *
+
+type family Weight (instr :: Instruction) where
+  Weight 'STOP     = StackUpdate 0 0
+  Weight 'ADD      = StackUpdate 2 1
+  Weight 'MUL      = StackUpdate 2 1
+  Weight 'SUB      = StackUpdate 2 1
+  Weight 'DIV      = StackUpdate 2 1
+  Weight 'MOD      = StackUpdate 2 1
+  Weight 'GT       = StackUpdate 2 1
+  Weight 'LT       = StackUpdate 2 1
+  Weight 'EQ       = StackUpdate 2 1
+  Weight 'ISZERO   = StackUpdate 1 1
+  Weight 'POP      = StackUpdate 1 0
+  Weight 'MLOAD    = StackUpdate 1 1
+  Weight 'MSTORE   = StackUpdate 2 0
+  Weight 'MSTORE8  = StackUpdate 2 0
+  Weight 'JUMP     = StackUpdate 1 0
+  Weight 'JUMPI    = StackUpdate 2 1
+  Weight 'PC       = StackUpdate 0 1
+  Weight 'JUMPDEST = StackUpdate 0 0
+  Weight 'PUSH1    = StackUpdate 0 1
+  Weight 'PUSH2    = StackUpdate 0 1
+  Weight 'PUSH32   = StackUpdate 0 1
+  Weight 'DUP1     = StackUpdate 1 2
+  Weight 'DUP2     = StackUpdate 2 3
+  Weight 'SWAP1    = StackUpdate 2 2
+  Weight 'SWAP2    = StackUpdate 3 3
+  Weight 'LOG0     = StackUpdate 2 0
+  Weight 'LOG1     = StackUpdate 3 0
+  Weight 'LOG2     = StackUpdate 4 0
+  Weight 'RETURN   = StackUpdate 2 0
+  Weight 'ADDRESS  = StackUpdate 0 1
+
 toInstrCode :: Instruction -> (Opcode, Integer)
-toInstrCode STOP     = (0x00, 1)
-toInstrCode ADD      = (0x01, 1)
-toInstrCode MUL      = (0x02, 1)
-toInstrCode SUB      = (0x03, 1)
-toInstrCode DIV      = (0x04, 1)
-toInstrCode MOD      = (0x06, 1)
-toInstrCode GT       = (0x11, 1)
-toInstrCode LT       = (0x10, 1)
-toInstrCode EQ       = (0x14, 1)
-toInstrCode ISZERO   = (0x15, 1)
-toInstrCode POP      = (0x50, 1)
-toInstrCode MLOAD    = (0x51, 1)
-toInstrCode MSTORE   = (0x52, 1)
-toInstrCode MSTORE8  = (0x53, 1)
-toInstrCode JUMP     = (0x56, 1)
-toInstrCode JUMPI    = (0x57, 1)
-toInstrCode PC       = (0x58, 1)
-toInstrCode JUMPDEST = (0x5b, 1)
-toInstrCode PUSH1    = (0x60, 2)
-toInstrCode PUSH2    = (0x61, 3)
-toInstrCode PUSH32   = (0x7f, 33)
-toInstrCode DUP1     = (0x80, 1)
-toInstrCode DUP2     = (0x81, 1)
-toInstrCode SWAP1    = (0x90, 1)
-toInstrCode SWAP2    = (0x91, 1)
-toInstrCode LOG0     = (0xA0, 1)
-toInstrCode LOG1     = (0xA1, 1)
-toInstrCode LOG2     = (0xA2, 1)
-toInstrCode RETURN   = (0xf3, 1)
-toInstrCode ADDRESS  = (0x30, 1)
+toInstrCode = \case
+  STOP     -> (0x00, 1)
+  ADD      -> (0x01, 1)
+  MUL      -> (0x02, 1)
+  SUB      -> (0x03, 1)
+  DIV      -> (0x04, 1)
+  MOD      -> (0x06, 1)
+  GT       -> (0x11, 1)
+  LT       -> (0x10, 1)
+  EQ       -> (0x14, 1)
+  ISZERO   -> (0x15, 1)
+  POP      -> (0x50, 1)
+  MLOAD    -> (0x51, 1)
+  MSTORE   -> (0x52, 1)
+  MSTORE8  -> (0x53, 1)
+  JUMP     -> (0x56, 1)
+  JUMPI    -> (0x57, 1)
+  PC       -> (0x58, 1)
+  JUMPDEST -> (0x5b, 1)
+  PUSH1    -> (0x60, 2)
+  PUSH2    -> (0x61, 3)
+  PUSH32   -> (0x7f, 3)
+  DUP1     -> (0x80, 1)
+  DUP2     -> (0x81, 1)
+  SWAP1    -> (0x90, 1)
+  SWAP2    -> (0x91, 1)
+  LOG0     -> (0xA0, 1)
+  LOG1     -> (0xA1, 1)
+  LOG2     -> (0xA2, 1)
+  RETURN   -> (0xf3, 1)
+  ADDRESS  -> (0x30, 1)
 
 pcCost :: Instruction -> Integer
-pcCost = snd . toInstrCode
+pcCost (toInstrCode -> (_, cost)) = cost
 
 pcCosts :: [Instruction] -> Integer
 pcCosts = sum . map pcCost
+
+op' :: (Weight instr1 ~ Weight instr2) => Proxy instr1 -> Proxy instr2 -> Instruction -> Instruction -> String
+op' _ _ instr1 instr2 = show instr1
 
 -- | Class of monads that can run opcodes
 class Monad m => OpcodeM m where

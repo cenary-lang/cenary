@@ -1,9 +1,13 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE KindSignatures #-}
+
 module Ivy.Syntax where
 
 type Name = String
 
 newtype Block = Block [Stmt]
-  deriving (Eq, Show)
+  deriving (Show, Eq)
 
 data Op =
     OpAdd
@@ -21,8 +25,8 @@ type Index = Integer
 
 data PrimType =
     TInt
-  | TChar
-  | TBool
+  | TChar 
+  | TBool 
   | TArray Length PrimType
   | TFun PrimType
   deriving Eq
@@ -33,6 +37,9 @@ instance Show PrimType where
   show TBool = "boolean"
   show (TArray _ ty) = show ty ++ " array"
   show (TFun _ty) = "function"
+
+data SStmt' :: *
+data FunStmt' :: *
 
 data Stmt =
     SVarDecl PrimType Name
@@ -45,15 +52,10 @@ data Stmt =
   | SIfThenElse Expr Block Block
   | SReturn Expr
   | SExpr Expr
-  deriving (Eq, Show)
+  deriving (Show, Eq)
 
-data SFunDef = SFunDef String [(PrimType, Name)] Block PrimType
-  deriving (Eq, Show)
-
-data AnyStmt =
-    FundefStmt SFunDef
-  | Stmt Stmt
-  deriving (Eq, Show)
+data FunStmt = FunStmt String [(PrimType, Name)] Block PrimType
+  deriving (Show, Eq)
 
 data Expr =
     EInt Integer
@@ -64,4 +66,4 @@ data Expr =
   | EBinop Op Expr Expr
   | EFunCall String [Expr]
   | EArray Length [Expr]
-  deriving (Eq, Show)
+  deriving (Show, Eq)

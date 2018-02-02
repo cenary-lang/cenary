@@ -96,12 +96,6 @@ stmt =
    <|> sIf
    <?> "Statement"
 
-anyStmt :: Parser AnyStmt
-anyStmt =
-   try (FundefStmt <$> eFunDef)
-   <|> (Stmt <$> stmt)
-   <?> "Any Statement"
-
 sExpr :: Parser Stmt
 sExpr = SExpr <$> expr
 
@@ -140,7 +134,7 @@ varDecl = do
   <?> "variable declaration"
 
 block :: Parser Block
-block = Block <$> topLevel
+block = Block <$> (many stmt)
 
 curlied :: Parser a -> Parser a
 curlied p = reserved "{" *> p <* reserved "}"
@@ -218,8 +212,8 @@ sIfThenElse = do
   return (SIfThenElse pred tBody eBody)
   <?> "if then else"
 
-eFunDef :: Parser SFunDef
-eFunDef = do
+sFunDef :: Parser FunStmt
+sFunDef = do
   retType <- try tyArray <|> typeAnnot
   whitespace
   name <- identifier
@@ -229,7 +223,7 @@ eFunDef = do
   char ')'
   whitespace
   body <- curlied block
-  return (SFunDef name args body retType)
+  return (FunStmt name args body retType)
   <?> "function definition"
 
 eFunCall :: Parser Expr
@@ -249,18 +243,8 @@ sIf = do
   return (SIf pred body)
   <?> "if statement"
 
-topLevel :: Parser [Stmt]
-topLevel =
-  many (stmt <* reserved ";")
-  <?> "topLevel"
+parse :: T.Text -> Either ParseError [FunStmt]
+parse = T.unpack >>> P.parse (P.many sFunDef) "<stmt-toplevel>"
 
-topLevelAny :: Parser [AnyStmt]
-topLevelAny =
-  many (anyStmt <* reserved ";")
-  <?> "topLevelAny"
-
-parse :: T.Text -> Either ParseError AnyStmt
-parse = T.unpack >>> P.parse anyStmt "<stmt-toplevel>"
-
-parseTopLevel :: T.Text -> Either ParseError [AnyStmt]
-parseTopLevel = T.unpack >>> P.parse topLevelAny "<stmt-toplevel>"
+-- parseTopLevel :: T.Text -> Either ParseError [AnyStmt]
+-- parseTopLevel = T.unpack >>> P.parse topLevelAny "<stmt-toplevel>"

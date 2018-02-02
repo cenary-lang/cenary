@@ -4,16 +4,13 @@
 module Main where
 
 ------------------------------------------------------
-import           Control.Applicative
-import           Control.Monad.State
-import           Control.Monad.Logger
+import           Control.Monad.State hiding (state)
 import           Control.Monad.Except
 import           Data.Monoid          ((<>))
 import           Control.Arrow        (first, second)
 import           Data.Text            as T
 import           Data.Text.IO         as T
 import qualified Data.Map as M
-import           System.Environment
 import           System.Process
 import           Control.Error.Util (hoistEither)
 import           System.IO            (hClose)
@@ -38,44 +35,23 @@ instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Compile Error: " <> show err
 
--- | These 3 functions should be refactored with StateT monad transformer.
-codegenFundef :: CodegenState -> [S.SFunDef] -> Either Error CodegenState
+codegenFundef :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
 codegenFundef initState stmts = do
   go initState stmts
     where
-      go :: CodegenState -> [S.SFunDef] -> Either Error CodegenState
+      go :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
       go state [] = Right state
       go state (stmt:xs) =
         case execStateT (runEvm (C.codegenFunDef stmt)) state of
           Left (Codegen -> err) -> throwError err
           Right newState -> go newState xs
 
-codegen :: Monad m => CodegenState -> [S.AnyStmt] -> ExceptT Error m T.Text
-codegen state = hoistEither . pureCodegen state
+codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
+codegen state = fmap _byteCode . hoistEither . codegenFundef state
 
-pureCodegen :: CodegenState -> [S.AnyStmt] -> Either Error T.Text
-pureCodegen initState anyStmts = do
-  let (stmts, fundefStmts) = splitStmts anyStmts
-  stateAfterFunctions <- codegenFundef initState fundefStmts
-  codegen' (stateAfterFunctions, stmts)
-  where
-    splitStmts :: [S.AnyStmt] -> ([S.Stmt], [S.SFunDef])
-    splitStmts []                       = ([], [])
-    splitStmts (S.FundefStmt fundef:xs) = second (fundef:) (splitStmts xs)
-    splitStmts (S.Stmt stmt:xs)         = first (stmt:) (splitStmts xs)
-
-codegen' :: (CodegenState, [S.Stmt]) -> Either Error T.Text
-codegen' (_, []) = return ""
-codegen' (state, e:ex) = do
-  let result = execStateT (runEvm (C.codegenStmt e)) state
-  case result of
-    Left (Codegen -> err)       -> throwError err
-    Right newState ->
-      (_byteCode newState <>) <$> codegen' (newState, ex)
-
-parse :: MonadIO m => T.Text -> ExceptT Error m [S.AnyStmt]
+parse :: MonadIO m => T.Text -> ExceptT Error m [S.FunStmt]
 parse code =
-  case P.parseTopLevel code of
+  case P.parse code of
     Left (Parsing -> err) -> throwError err
     Right result -> return result
 
@@ -102,7 +78,7 @@ initCodegenState =
 
 main :: IO ()
 main = do
-  (Options mode inputFile) <- parseOptions
+  Options mode inputFile <- parseOptions
   code <- T.readFile inputFile
   result <- runExceptT (go code mode)
   case result of

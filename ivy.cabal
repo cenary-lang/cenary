@@ -26,19 +26,21 @@ executable ivy
   ghc-options:         -Wall
   build-depends:
     base >=4.9 && <4.10,
+    TypeCompose,
+    comonad,
     containers,
+    either,
+    errors,
     lens,
     monad-logger,
     mtl,
     optparse-applicative,
     parsec,
     parsec-numbers,
+    pretty-simple,
     process,
     text,
-    TypeCompose,
-    pretty-simple,
-    either,
-    errors
+    template-haskell
   other-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
