@@ -22,6 +22,7 @@ instance IsString Mode where
   fromString "run"      = Run
   fromString "disasm"   = Disasm
   fromString "asm"      = Asm
+  fromString _          = Run
 
 parseMode :: Parser Mode
 parseMode =

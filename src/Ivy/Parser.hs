@@ -9,14 +9,17 @@ import           Control.Arrow         ((>>>))
 import           Data.Functor
 import           Data.Functor.Identity
 import qualified Data.Text             as T
+import           Prelude               hiding (pred, until)
 import           Text.Parsec           as P
-import           Text.Parsec.Char      as PC
 import           Text.Parsec.Expr
 import           Text.Parsec.String    (Parser)
 --------------------------------------------------------------------------------
 import           Ivy.Lexer
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
+
+char' :: Char -> Parser ()
+char' = void . char
 
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text
 text input = T.pack <$> string (T.unpack input)
@@ -56,8 +59,10 @@ ePrim = try primInt
 term :: Parser Integer
 term = natural
 
+binary :: String -> Op -> Assoc -> Operator String () Identity Expr
 binary s opType = Infix (reservedOp s >> return (EBinop opType))
 
+binops :: [[Operator String () Identity Expr]]
 binops = [ [ binary "*" OpMul AssocLeft
            , binary "/" OpDiv AssocLeft
            , binary "%" OpMod AssocLeft
@@ -115,9 +120,9 @@ typeAnnot =
 tyArray :: Parser PrimType
 tyArray = do
   type' <- typeAnnot
-  char '['
+  char' '['
   size <- integer
-  char ']'
+  char' ']'
   return (TArray size type')
 
 typedIdentifier :: Parser (PrimType, Name)
@@ -149,7 +154,7 @@ while = do
 times :: Parser Stmt
 times = do
   until <- integer
-  char '.'
+  char' '.'
   reserved "times"
   reserved "do"
   body <- block
@@ -168,9 +173,9 @@ assignment = do
 arrAssignment :: Parser Stmt
 arrAssignment = do
   name <- identifier
-  char '['
+  char' '['
   index <- expr
-  char ']'
+  char' ']'
   whitespace
   reserved "="
   whitespace
@@ -197,9 +202,9 @@ eIdentifier =
 eArrIdentifier :: Parser Expr
 eArrIdentifier = do
   name <- identifier
-  char '['
+  char' '['
   index <- expr
-  char ']'
+  char' ']'
   return (EArrIdentifier name index)
 
 sIfThenElse :: Parser Stmt
@@ -218,9 +223,9 @@ sFunDef = do
   whitespace
   name <- identifier
   whitespace
-  char '('
+  char' '('
   args <- commaSep typedIdentifier
-  char ')'
+  char' ')'
   whitespace
   body <- curlied block
   return (FunStmt name args body retType)
@@ -229,9 +234,9 @@ sFunDef = do
 eFunCall :: Parser Expr
 eFunCall = do
   name <- identifier
-  char '('
+  char' '('
   args <- commaSep expr
-  char ')'
+  char' ')'
   return (EFunCall name args)
   <?> "function call"
 

@@ -13,21 +13,14 @@ module Ivy.EvmAPI.Instruction where
 
 --------------------------------------------------------------------------------
 import           Control.Arrow
-import           Control.Applicative
 import           Control.Monad.Except
-import           Control.Monad.Logger.CallStack (logInfo)
 import           Control.Lens hiding (op)
-import           Control.Monad.State
-import Data.Monoid
-import           Control.Monad.Writer
 import qualified Data.Text              as T
 import           Text.Printf
 import           Prelude hiding (LT, EQ, GT)
 import           GHC.TypeLits
-import Data.Proxy
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
-import qualified Ivy.Syntax             as S
 --------------------------------------------------------------------------------
 
 data Instruction =
@@ -137,9 +130,6 @@ pcCost (toInstrCode -> (_, cost)) = cost
 
 pcCosts :: [Instruction] -> Integer
 pcCosts = sum . map pcCost
-
-op' :: (Weight instr1 ~ Weight instr2) => Proxy instr1 -> Proxy instr2 -> Instruction -> Instruction -> String
-op' _ _ instr1 instr2 = show instr1
 
 -- | Class of monads that can run opcodes
 class Monad m => OpcodeM m where

@@ -7,26 +7,21 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import Control.Comonad
 import           Control.Lens                   hiding (Context, assign, op, index)
 import           Control.Monad.Except
 import           Control.Arrow                  ((***))
-import           Control.Monad.Logger           hiding (logDebug, logInfo)
-import           Control.Monad.Logger.CallStack (logDebug, logInfo, logWarn)
 import           Control.Monad.State hiding (state)
 import           Data.Char                      (ord)
 import           Data.Either.Combinators        (eitherToError)
-import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Monoid                    ((<>))
-import qualified Data.Text                      as T
 import           Prelude                        hiding (log, lookup, LT, EQ, GT, until, pred)
-import           Debug.Trace
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -58,6 +53,7 @@ instance ContextM Evm where
       go (ctx:xs) =
         case M.lookup name ctx of
           Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
+          Just _ -> throwError $ InternalError $ "Another case for context (1)"
           Nothing -> go xs
         where
           decideVar (ty, Nothing)   = return (Decl ty)
@@ -69,6 +65,7 @@ instance ContextM Evm where
         go (ctx:xs) =
           case M.lookup name ctx of
             Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
+            Just _ -> throwError $ InternalError $ "Another case for context (2)"
             Nothing -> go xs
   createCtx = env %= (id *** (M.empty :))
   popCtx = env %= (id *** tail)
@@ -314,6 +311,29 @@ estimateOffset block =
 -- | This type alias will be used for top-level codegen, since
 -- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+
+data TOperand a = TOperand Addr
+
+tbinop :: CodegenM m => Instruction -> PrimType -> TOperand a -> TOperand a -> m (TOperand a)
+tbinop instr ty (TOperand addrl) (TOperand addrr) = do
+  load (sizeof ty) addrl
+  load (sizeof ty) addrr
+  op instr
+  addr <- alloc (sizeof ty)
+  op2 PUSH32 addr
+  storeMultibyte (sizeof ty)
+  return (TOperand addr)
+     
+type BinOp a = forall m. CodegenM m => TOperand a -> TOperand a -> m (TOperand a)
+
+(+:) :: BinOp Int
+(+:) = tbinop ADD TInt
+
+(-:) :: BinOp Int
+(-:) = tbinop SUB TInt
+
+(/:) :: BinOp Int
+(/:) = tbinop DIV TInt
 
 registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
 registerFunction name args = do

@@ -5,15 +5,13 @@
 module Ivy.Codegen.Memory where
 
 --------------------------------------------------------------------------------
-import           Control.Lens                   hiding (op)
+import           Control.Lens                   hiding (op, ix)
 import           Control.Monad
 import           Control.Monad.Except
-import           Control.Monad.Logger.CallStack (logInfo)
 import           Data.Functor                   (($>))
 import qualified Data.Map                       as M
 import           Data.Monoid
 import           Control.Monad.State
-import qualified Data.Text                      as T
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
@@ -69,16 +67,16 @@ instance MemoryM Evm where
     memPtrs <- use memPointers
     case M.lookup size memPtrs of
       Nothing -> throwError $ InternalError $ "Pointer does not exist: " <> show size
-      Just (MemBlock index alloc) ->
-        if totalMemBlockSize - alloc >= sizeInt size
+      Just (MemBlock ix allocated) ->
+        if totalMemBlockSize - allocated >= sizeInt size
           then
           let
-            newPos :: Integer = (alloc + sizeInt size)
+            newPos :: Integer = (allocated + sizeInt size)
           in do
-            updateMemPointer size index newPos
-            let baseAddr = calcAddr index alloc
-            let targetAddr = calcAddr index newPos
-            markMemAlloc index targetAddr
+            updateMemPointer size ix newPos
+            let baseAddr = calcAddr ix allocated
+            let targetAddr = calcAddr ix newPos
+            markMemAlloc ix targetAddr
             return baseAddr
         else do
             newIndex <- findMemspace
@@ -130,7 +128,7 @@ findMemspace = do
   (memory %= M.insert msize (0 :: Integer)) $> msize
 
 calcAddr :: Integer -> Integer -> Integer
-calcAddr index allocLen = index * totalMemBlockSize + allocLen
+calcAddr ix allocLen = ix * totalMemBlockSize + allocLen
 
 -- O(logn)
 updateMemPointer
@@ -139,41 +137,41 @@ updateMemPointer
   -> Integer    -- Index of the block
   -> Integer    -- New allocated size
   -> m ()
-updateMemPointer size index newAllocSize =
+updateMemPointer size ix newAllocSize =
   memPointers %= M.alter alter' size
   where
     alter' :: Maybe MemBlock -> Maybe MemBlock
     alter' Nothing =
       error $ "Pointer does not exist for size: " <> show size
-    alter' (Just (MemBlock old_index old_alloc)) =
-      Just (MemBlock index newAllocSize)
+    alter' (Just (MemBlock _old_index _old_alloc)) =
+      Just (MemBlock ix newAllocSize)
 
 markMemAlloc
   :: MonadState CodegenState m
   => Integer
   -> Integer
   -> m ()
-markMemAlloc index alloc = memory %= M.alter (const (Just alloc)) index
+markMemAlloc ix toAlloc = memory %= M.alter (const (Just toAlloc)) ix
 
 allocBulk
   :: (MonadState CodegenState m, MemoryM m)
   => Integer
   -> Size
   -> m Integer
-allocBulk length size = do
+allocBulk len size = do
   msize <- fromIntegral . M.size <$> use memory
-  if sizeInt size * length <= totalMemBlockSize
+  if sizeInt size * len <= totalMemBlockSize
      then -- There are 5 blocks of 4 bytes
-       memory %= M.update (updateInc size length) msize
+       memory %= M.update (updateInc size len) msize
      else do -- There are 15 blocks of 4 bytes
        let fitinLength = totalMemBlockSize `div` sizeInt size -- 32 / 4 = 8 mem blocks can fit in
        memory %= M.update (updateInc size fitinLength) msize
-       void $ allocBulk (length - fitinLength) size
+       void $ allocBulk (len - fitinLength) size
   return $ calcAddr msize (0 :: Integer)
     where
       updateInc :: Size -> Integer -> Integer -> Maybe Integer
       updateInc _ 0 allocated = Just allocated
-      updateInc size length allocated = updateInc size (length - 1) (allocated + sizeInt size)
+      updateInc size' len' allocated = updateInc size' (len' - 1) (allocated + sizeInt size')
 
 sizeof :: PrimType -> Size
 sizeof TInt  = Size_8

@@ -1,8 +1,8 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
 module Ivy.Lexer where
 
 --------------------------------------------------------------------------------
-import           Text.Parsec.Language (emptyDef)
-import           Text.Parsec.String   (Parser)
 import qualified Text.Parsec.Token    as Tok
 --------------------------------------------------------------------------------
 import           Ivy.Lexer.Language        (style)

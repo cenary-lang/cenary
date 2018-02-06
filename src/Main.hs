@@ -7,7 +7,6 @@ module Main where
 import           Control.Monad.State hiding (state)
 import           Control.Monad.Except
 import           Data.Monoid          ((<>))
-import           Control.Arrow        (first, second)
 import           Data.Text            as T
 import           Data.Text.IO         as T
 import qualified Data.Map as M

@@ -1,20 +1,19 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module Utils.EvmAsm where
 
 --------------------------------------------------------------------------------
 import           Data.Functor
-import           Control.Applicative hiding (many)
+import           Data.Functor.Identity                (Identity)
 import           Data.Monoid
-import qualified Data.Text            as T
-import           Data.String          (IsString)
-import           Text.Parsec          as P
-import           Text.ParserCombinators.Parsec.Number
-import           Text.Parsec.String
-import qualified Text.Parsec.Token    as Tok
+import qualified Data.Text                            as T
+import           Text.Parsec                          as P
 import           Text.Parsec.Language
+import           Text.Parsec.String
+import qualified Text.Parsec.Token                    as Tok
+import           Text.ParserCombinators.Parsec.Number
 import           Text.Printf
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -22,7 +21,10 @@ import           Text.Printf
 lexer :: Tok.TokenParser ()
 lexer = Tok.makeTokenParser emptyDef
 
+integer :: ParsecT String () Identity Integer
 integer = Tok.integer lexer
+
+whiteSpace :: ParsecT String () Identity ()
 whiteSpace = Tok.whiteSpace lexer
 
 newtype ByteCode = ByteCode { unByteCode :: T.Text }
@@ -35,7 +37,7 @@ asm' :: [T.Text] -> ByteCode
 asm' [] = ByteCode ""
 asm' (input:xs) =
   case parse instrParser "<instruction_set>" (T.unpack input) of
-    Left err -> error (show err)
+    Left err    -> error (show err)
     Right code' -> code' <> asm' xs
 
 toByteCode :: String -> Integer
@@ -62,6 +64,7 @@ toByteCode other = error $ "Instruction " <> other <> " is not recognised."
 
 toByteCode1 :: String -> Integer -> [Integer]
 toByteCode1 "PUSH" val = [0x7f, val]
+toByteCode1 other _ = error $ "Instruction " <> other <> " is not recognised."
 
 instruction :: Parser ByteCode
 instruction = do
@@ -72,7 +75,7 @@ instruction = do
           let [instr', val'] = toByteCode1 instr val in
           ByteCode (T.pack (printf "%02x" instr')) <> ByteCode (T.pack (printf "%064x" val'))
         Nothing -> ByteCode $ T.pack $ printf "%02x" $ toByteCode instr
-  optionMaybe (spaces >> char '#' >> spaces)
+  _ <- optionMaybe (spaces >> char '#' >> spaces)
   return result
 
 instrParser :: Parser ByteCode
