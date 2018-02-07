@@ -25,3 +25,4 @@ operator      = Tok.operator lexer
 symbol        = Tok.symbol lexer
 charLiteral   = Tok.charLiteral lexer
 stringLiteral = Tok.stringLiteral lexer
+braces = Tok.braces lexer

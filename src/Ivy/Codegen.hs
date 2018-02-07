@@ -28,6 +28,7 @@ import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
 -- import           Ivy.Parser
 import           Ivy.Syntax
+import Debug.Trace
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -62,7 +63,7 @@ instance ContextM Evm where
     go =<< snd <$> use env
       where
         go [] = return NotDeclared
-        go (ctx:xs) =
+        go (ctx:xs) = trace (show ctx) $
           case M.lookup name ctx of
             Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
             Just _ -> throwError $ InternalError $ "Another case for context (2)"
@@ -349,6 +350,7 @@ registerFunction name args = do
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt name args block retTyAnnot) = do
+  trace ("registering: " ++ show name) (return ())
   registerFunction name args
   offset <- estimateOffset block
   op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
@@ -384,15 +386,15 @@ takeArgsToContext funcName registryArgs callerArgs = do
         checkTyEq registryName registryTy callerTy
         storeAddressed (sizeof callerTy) callerAddr registryAddr
 
-codegenExpr :: forall m. CodegenM m => Expr -> m Operand
-codegenExpr expr@(EFunCall name args) = do
+codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
+codegenFunCall name args = do
   registry <- use funcRegistry
   case M.lookup name registry of
     Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
     Just registryArgs -> takeArgsToContext name registryArgs =<< mapM codegenExpr args
 
   lookupFun name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
+    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
     FunDef retTy funAddr retAddr -> do
       -- Preparing checkpoint
       op PC
@@ -405,6 +407,10 @@ codegenExpr expr@(EFunCall name args) = do
       op JUMPDEST
 
       return (Operand retTy retAddr)
+
+codegenExpr :: forall m. CodegenM m => Expr -> m Operand
+codegenExpr (EFunCall name args) =
+  codegenFunCall name args
 
 codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case

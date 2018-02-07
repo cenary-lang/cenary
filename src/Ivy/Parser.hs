@@ -139,7 +139,7 @@ varDecl = do
   <?> "variable declaration"
 
 block :: Parser Block
-block = Block <$> (many stmt)
+block = Block <$> many (stmt <* reserved ";")
 
 curlied :: Parser a -> Parser a
 curlied p = reserved "{" *> p <* reserved "}"
@@ -250,6 +250,3 @@ sIf = do
 
 parse :: T.Text -> Either ParseError [FunStmt]
 parse = T.unpack >>> P.parse (P.many sFunDef) "<stmt-toplevel>"
-
--- parseTopLevel :: T.Text -> Either ParseError [AnyStmt]
--- parseTopLevel = T.unpack >>> P.parse topLevelAny "<stmt-toplevel>"

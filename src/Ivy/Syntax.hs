@@ -38,9 +38,6 @@ instance Show PrimType where
   show (TArray _ ty) = show ty ++ " array"
   show (TFun _ty) = "function"
 
-data SStmt' :: *
-data FunStmt' :: *
-
 data Stmt =
     SVarDecl PrimType Name
   | SDeclAndAssignment PrimType Name Expr

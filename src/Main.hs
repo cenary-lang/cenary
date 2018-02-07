@@ -36,14 +36,13 @@ instance Show Error where
 
 codegenFundef :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
 codegenFundef initState stmts = do
-  go initState stmts
-    where
-      go :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
-      go state [] = Right state
-      go state (stmt:xs) =
-        case execStateT (runEvm (C.codegenFunDef stmt)) state of
-          Left (Codegen -> err) -> throwError err
-          Right newState -> go newState xs
+  case execStateT (runEvm action) initState of
+    Left (Codegen -> err) -> throwError err
+    Right state -> return state
+  where
+    action = do
+      mapM_ C.codegenFunDef stmts
+      C.codegenFunCall "main" []
 
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
 codegen state = fmap _byteCode . hoistEither . codegenFundef state
