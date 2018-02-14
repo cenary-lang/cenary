@@ -114,7 +114,7 @@ toInstrCode = \case
   JUMPDEST -> (0x5b, 1)
   PUSH1    -> (0x60, 2)
   PUSH2    -> (0x61, 3)
-  PUSH32   -> (0x7f, 3)
+  PUSH32   -> (0x7f, 33)
   DUP1     -> (0x80, 1)
   DUP2     -> (0x81, 1)
   SWAP1    -> (0x90, 1)
