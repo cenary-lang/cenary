@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module Ivy.Main (main, parse, initCodegenState, codegen, AST, Error) where
+module Ivy.Main where
 
 ------------------------------------------------------
 import           Control.Error.Util (hoistEither)
@@ -58,11 +58,11 @@ parse code =
     Left (Parsing -> err) -> throwError err
     Right result          -> return result
 
-execByteCode :: MonadIO m => T.Text -> m ()
+execByteCode :: MonadIO m => T.Text -> m T.Text
 execByteCode byteCode = do
-  (_, Just hout, _, _) <- liftIO $ createProcess
-    (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]) { std_out = CreatePipe }
-  void $ liftIO (T.hGetContents hout) <* liftIO (hClose hout)
+  (_, _, Just hout, _) <- liftIO $ createProcess
+    (proc "evm" ["--debug", "--code", T.unpack byteCode, "run", "2> out.log"]) { std_err = CreatePipe }
+  liftIO $ T.hGetContents hout <* hClose hout
 
 -- Given the address of the deployer, prepares the environment
 initEnv :: Integer -> Env
@@ -97,10 +97,10 @@ main = do
         ByteCode ->
           parse code >>= codegen initCodegenState >>= liftIO . print
         Run ->
-          parse code >>= codegen initCodegenState >>= execByteCode
+          void $ parse code >>= codegen initCodegenState >>= execByteCode
         Asm -> do
           let byteCode = asm (T.lines code)
-          liftIO (execByteCode byteCode)
+          void $ liftIO (execByteCode byteCode)
         Disasm -> do
           parse code >>= codegen initCodegenState >>= liftIO . T.writeFile "yis"
           (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }

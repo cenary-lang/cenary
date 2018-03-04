@@ -3,13 +3,13 @@ bool even(int i) {
 }
 
 int main() {
-  int a = 9;
+  int a = 8;
   bool myval = even(a);
   char[5] name;
   if(myval) {
     name = "yigit";
   } else {
-    name = "efeee";
+    name = "other";
   };
   return 0; 
 }

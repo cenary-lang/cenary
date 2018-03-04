@@ -156,43 +156,27 @@ codegenStmt (SWhile pred block) = do
   checkTyEq "index_of_while_pred" TBool predTy
 
   load (sizeof TBool) predAddr
-  op DUP1
   op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
 
-  -- Don't enter the loop if predicate is already false
-  -- predOffset <- estimateOffsetExpr pred
-  -- blockOffset <- estimateOffset block
-
-  -- FIXME: This instruction set depends on implementation of `load` method. Find a way!
-  -- let costToWhile = pcCosts [PC, ADD, JUMPI, JUMPDEST, PC, PUSH32 0, SWAP1, SUB, SWAP1, POP, PUSH32 0, PUSH32 0, MLOAD, DIV, SWAP1, DUP1, SWAP2, SWAP1, JUMPI] + blockOffset + predOffset
   rec op (PUSH32 whileOut)
-      -- op PC
-      -- op ADD
       op JUMPI
 
       -- Loop start
-      op JUMPDEST
+      loopStart <- jumpdest
 
       -- Prepare true value of current PC
-      op PC
-      op (PUSH32 0x01)
-      op SWAP1
-      op SUB
+      op (PUSH32 loopStart)
 
       -- Code body
       executeBlock block
 
       -- Load predicate again
-      op SWAP1
-      op POP
       Operand predTy' predAddr' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
       load (sizeof TBool) predAddr'
-      op SWAP1
+      -- op SWAP1
 
       -- Jump to destination back if target value is nonzero
-      op DUP1
-      op SWAP2
       op SWAP1
       op JUMPI
       whileOut <- jumpdest

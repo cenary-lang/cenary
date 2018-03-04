@@ -16,48 +16,40 @@ data Assertion =
   | ShouldParse CodegenAssertion
 
 data CodegenAssertion =
-    ShouldCodegen
-  | ShouldNotCodegen
+    ShouldNotCodegen
+  | ShouldCodegen (T.Text -> Bool) -- Should generate code and output matches the given assertion
 
 type SourceFile = FilePath
 
-assertions :: [(Assertion, SourceFile)]
+assertions :: [(String, Assertion, SourceFile)]
 assertions =
-  [ (ShouldParse ShouldNotCodegen, "Corrupted.ivy")
-  , (ShouldParse ShouldCodegen, "FunCall.ivy")
+  [ ("Should not parse source with corrupted syntax", ShouldParse ShouldNotCodegen, "Corrupted.ivy")
+  , ("Should be able to generate code for function calls", ShouldParse (ShouldCodegen (T.isInfixOf "yigit")), "FunCall.ivy")
+    -- Computes 15th element of fibonacci series. 0x0262 = 610d
+  , ("Should calculate 15th element of Fibonacci series as 610", ShouldParse (ShouldCodegen (T.isInfixOf "02 62")), "Fibonacci.ivy")
+  , ("Should NOT calculate 15th element of Fibonacci series as 611", ShouldParse (ShouldCodegen (not . T.isInfixOf "02 63")), "Fibonacci.ivy")
   ]
 
 main :: IO ()
 main = hspec $ do
   traverse_ assert assertions
 
-failOnLeft :: (a -> String) -> ExceptT a IO b -> IO b
-failOnLeft onLeft action = runExceptT action >>= \case
-  Left a -> expectationFailure (onLeft a) >> error "" -- assertFailure still returns () ...
-  Right v -> pure v
-
-failOnLeft_ :: String -> ExceptT a IO b -> IO b
-failOnLeft_ = failOnLeft . const
-
-assert :: (Assertion, SourceFile) -> SpecWith ()
-assert (assertion, sourceFile) =
+assert :: (String, Assertion, SourceFile) -> SpecWith ()
+assert (description, assertion, sourceFile) =
   describe sourceFile $
     case assertion of
       ShouldNotParse ->
-        it "should not parse" $ shouldNotParse sourceFile
+        it description $ shouldNotParse sourceFile
       ShouldParse ShouldNotCodegen -> do
-        it "should parse, but should not generate code" $ do
-          ast <- failOnLeft (("Source could not be parsed: " <>) . show) (parseSource sourceFile)
+        it description $ do
+          ast <- shouldParse sourceFile
           shouldNotCodegen ast
-      ShouldParse ShouldCodegen -> do
-        it "should parse and generate code" $ do
-          runExceptT (parseSource sourceFile) >>= \case
-            Left err -> expectationFailure $ "Source could not be parsed: " <> show err
-            Right ast -> do
-              _ <- failOnLeft
-                (("Code could not be generated for the source: " <>) . show)
-                (Ivy.codegen Ivy.initCodegenState ast)
-              pure ()
+      ShouldParse (ShouldCodegen outputAssertion) -> do
+        it description $ do
+          ast <- shouldParse sourceFile
+          output <- Ivy.execByteCode =<< shouldCodegen ast
+          outputAssertion output `shouldBe` True
+          pure ()
 
 getSource :: FilePath -> IO T.Text
 getSource filename =
@@ -68,6 +60,23 @@ shouldNotParse sourceFile = do
   runExceptT (parseSource sourceFile) >>= \case
     Left _  -> pure ()
     Right ast -> expectationFailure $ "Source could unexpectedly be parsed: " <> show ast
+
+failOnLeft :: (a -> String) -> ExceptT a IO b -> IO b
+failOnLeft onLeft action = runExceptT action >>= \case
+  Left a -> expectationFailure (onLeft a) >> error "" -- assertFailure still returns () ...
+  Right v -> pure v
+
+failOnLeft_ :: String -> ExceptT a IO b -> IO b
+failOnLeft_ = failOnLeft . const
+
+shouldParse :: SourceFile -> IO Ivy.AST
+shouldParse sourceFile = failOnLeft (("Source could not be parsed: " <>) . show) (parseSource sourceFile)
+
+shouldCodegen :: Ivy.AST -> IO T.Text
+shouldCodegen ast = 
+  failOnLeft
+    (("Code could not be generated for the source: " <>) . show)
+    (Ivy.codegen Ivy.initCodegenState ast)
 
 parseSource :: SourceFile -> ExceptT Ivy.Error IO Ivy.AST
 parseSource sourceFile = Ivy.parse =<< (liftIO (getSource sourceFile))
