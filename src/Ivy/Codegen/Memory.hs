@@ -1,18 +1,18 @@
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Ivy.Codegen.Memory where
 
 --------------------------------------------------------------------------------
-import           Control.Lens                   hiding (op, ix)
+import           Control.Lens hiding (ix, op)
 import           Control.Monad
 import           Control.Monad.Except
-import           Data.Functor                   (($>))
-import qualified Data.Map                       as M
-import           Data.Monoid
 import           Control.Monad.State
+import           Data.Functor (($>))
+import qualified Data.Map as M
+import           Data.Monoid
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction

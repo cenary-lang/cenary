@@ -3,9 +3,9 @@
 module Ivy.Lexer where
 
 --------------------------------------------------------------------------------
-import qualified Text.Parsec.Token    as Tok
+import qualified Text.Parsec.Token as Tok
 --------------------------------------------------------------------------------
-import           Ivy.Lexer.Language        (style)
+import           Ivy.Lexer.Language (style)
 --------------------------------------------------------------------------------
 
 lexer :: Tok.TokenParser ()

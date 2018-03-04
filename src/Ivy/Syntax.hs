@@ -1,8 +1,11 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE KindSignatures            #-}
 
 module Ivy.Syntax where
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 type Name = String
 
@@ -25,18 +28,18 @@ type Index = Integer
 
 data PrimType =
     TInt
-  | TChar 
-  | TBool 
+  | TChar
+  | TBool
   | TArray Length PrimType
   | TFun PrimType
   deriving Eq
 
 instance Show PrimType where
-  show TInt = "integer"
-  show TChar = "char"
-  show TBool = "boolean"
+  show TInt          = "integer"
+  show TChar         = "char"
+  show TBool         = "boolean"
   show (TArray _ ty) = show ty ++ " array"
-  show (TFun _ty) = "function"
+  show (TFun _ty)    = "function"
 
 data Stmt =
     SVarDecl PrimType Name

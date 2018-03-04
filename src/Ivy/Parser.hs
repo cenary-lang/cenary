@@ -5,14 +5,14 @@
 module Ivy.Parser where
 
 --------------------------------------------------------------------------------
-import           Control.Arrow         ((>>>))
+import           Control.Arrow ((>>>))
 import           Data.Functor
 import           Data.Functor.Identity
-import qualified Data.Text             as T
-import           Prelude               hiding (pred, until)
-import           Text.Parsec           as P
+import qualified Data.Text as T
+import           Prelude hiding (pred, until)
+import           Text.Parsec as P
 import           Text.Parsec.Expr
-import           Text.Parsec.String    (Parser)
+import           Text.Parsec.String (Parser)
 --------------------------------------------------------------------------------
 import           Ivy.Lexer
 import           Ivy.Syntax

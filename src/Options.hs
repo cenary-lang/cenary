@@ -2,8 +2,8 @@ module Options where
 
 ------------------------------------------------------
 import           Control.Applicative
-import           Data.Monoid         ((<>))
-import           Data.String         (IsString, fromString)
+import           Data.Monoid ((<>))
+import           Data.String (IsString, fromString)
 import           Options.Applicative
 ------------------------------------------------------
 ------------------------------------------------------

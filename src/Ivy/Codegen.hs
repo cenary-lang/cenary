@@ -15,17 +15,15 @@ module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import           Control.Arrow          ((***))
-import           Control.Lens           hiding (Context, assign, index, op)
+import           Control.Arrow ((***))
+import           Control.Lens hiding (Context, assign, index, op)
 import           Control.Monad.Except
-import           Control.Monad.State    hiding (state)
-import           Data.Char              (ord)
-import qualified Data.Map               as M
-import           Data.Monoid            ((<>))
-import           Prelude                hiding (EQ, GT, LT, log, lookup, pred,
-                                         until)
+import           Control.Monad.State hiding (state)
+import           Data.Char (ord)
+import qualified Data.Map as M
+import           Data.Monoid ((<>))
+import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until)
 --------------------------------------------------------------------------------
-import           Debug.Trace
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
@@ -64,7 +62,7 @@ instance ContextM Evm where
     go =<< snd <$> use env
       where
         go [] = return NotDeclared
-        go (ctx:xs) = trace (show ctx) $
+        go (ctx:xs) =
           case M.lookup name ctx of
             Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
             Just _ -> throwError $ InternalError $ "Another case for context (2)"
@@ -353,7 +351,6 @@ registerFunction name args = do
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt name args block retTyAnnot) = do
-  trace ("registering: " ++ show name) (return ())
   registerFunction name args
   -- offset <- estimateOffset block
   -- op $ PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset

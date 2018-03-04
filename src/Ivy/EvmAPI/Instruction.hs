@@ -6,11 +6,11 @@
 module Ivy.EvmAPI.Instruction where
 
 --------------------------------------------------------------------------------
-import           Control.Lens         hiding (op)
+import           Control.Lens hiding (op)
 import           Control.Monad.Except
-import           Control.Monad.State  (MonadState, gets)
-import           Data.Monoid          ((<>))
-import           Prelude              hiding (EQ, GT, LT)
+import           Control.Monad.State (MonadState, gets)
+import           Data.Monoid ((<>))
+import           Prelude hiding (EQ, GT, LT)
 import           Text.Printf
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types

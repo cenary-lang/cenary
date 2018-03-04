@@ -6,13 +6,13 @@ module Utils.EvmAsm where
 
 --------------------------------------------------------------------------------
 import           Data.Functor
-import           Data.Functor.Identity                (Identity)
+import           Data.Functor.Identity (Identity)
 import           Data.Monoid
-import qualified Data.Text                            as T
-import           Text.Parsec                          as P
+import qualified Data.Text as T
+import           Text.Parsec as P
 import           Text.Parsec.Language
 import           Text.Parsec.String
-import qualified Text.Parsec.Token                    as Tok
+import qualified Text.Parsec.Token as Tok
 import           Text.ParserCombinators.Parsec.Number
 import           Text.Printf
 --------------------------------------------------------------------------------

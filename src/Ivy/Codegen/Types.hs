@@ -9,14 +9,14 @@
 module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
-import           Control.Lens         hiding (Context)
+import           Control.Lens hiding (Context)
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.Map             as M
-import           Data.Semigroup       ((<>))
-import qualified Data.Sequence        as Seq
+import qualified Data.Map as M
+import           Data.Semigroup ((<>))
+import qualified Data.Sequence as Seq
 --------------------------------------------------------------------------------
-import           Ivy.Syntax           (Expr, PrimType (..), Stmt)
+import           Ivy.Syntax (Expr, PrimType (..), Stmt)
 --------------------------------------------------------------------------------
 
 data Instruction =

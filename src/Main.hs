@@ -4,27 +4,27 @@
 module Main where
 
 ------------------------------------------------------
-import           Control.Error.Util     (hoistEither)
+import           Control.Error.Util (hoistEither)
 import           Control.Monad.Except
-import           Control.Monad.State    hiding (state)
-import qualified Data.Map               as M
-import           Data.Monoid            ((<>))
-import           Data.Text              as T
-import           Data.Text.IO           as T
-import           System.IO              (hClose)
+import           Control.Monad.State hiding (state)
+import qualified Data.Map as M
+import           Data.Monoid ((<>))
+import           Data.Text as T
+import           Data.Text.IO as T
+import           System.IO (hClose)
 import           System.Process
-import           Text.Parsec            (ParseError)
-import           Text.Pretty.Simple     (pPrint)
+import           Text.Parsec (ParseError)
+import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
-import qualified Ivy.Codegen            as C
+import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
-import           Ivy.Codegen.Types      (CodegenError (..), CodegenState (..),
-                                         Env, Sig (..), initProgram, runEvm)
+import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
+                                    Sig (..), initProgram, runEvm)
 import           Ivy.EvmAPI.Instruction (generateByteCode)
-import qualified Ivy.Parser             as P
-import qualified Ivy.Syntax             as S
-import           Options                (Mode (..), Options (..), parseOptions)
-import           Utils.EvmAsm           (asm)
+import qualified Ivy.Parser as P
+import qualified Ivy.Syntax as S
+import           Options (Mode (..), Options (..), parseOptions)
+import           Utils.EvmAsm (asm)
 ------------------------------------------------------
 
 data Error =
