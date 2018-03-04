@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Ivy.Codegen.Memory where
 
@@ -44,23 +45,23 @@ instance MemoryM Evm where
   storeAddressed size valAddr destAddr = do
     -- Initial state
     load size valAddr
-    op2 PUSH32 destAddr
+    op (PUSH32 destAddr)
     storeMultibyte size
 
   load size addr = do
-    op2 PUSH32 (0x10 ^ (64 - 2 * sizeInt size))
-    op2 PUSH32 addr
+    op (PUSH32 (0x10 ^ (64 - 2 * sizeInt size)))
+    op (PUSH32 addr)
     op MLOAD
     op DIV
 
   storeVal size val destAddr = do
     let endDest = sizeInt size + destAddr - 1 -- To store 8 byte on address 10, we start from 17 and go back to 10
-    op2 PUSH32 val
-    op2 PUSH32 endDest
+    op (PUSH32 val)
+    op (PUSH32 endDest)
     op MSTORE8
     forM_ [1..sizeInt size - 1] $ \i -> do
-      op2 PUSH32 (val `div` (0x100 ^ i))
-      op2 PUSH32 (endDest - i)
+      op (PUSH32 (val `div` (0x100 ^ i)))
+      op (PUSH32 (endDest - i))
       op MSTORE8
 
   alloc size = do
@@ -87,7 +88,7 @@ instance MemoryM Evm where
             return (calcAddr newIndex baseAddr)
 
   storeMultibyte size = do
-    op2 PUSH32 (sizeInt size - 1)
+    op (PUSH32 (sizeInt size - 1))
     op ADD
     replicateM_ (fromIntegral (sizeInt size)) $ do
       -- Populate value and address for the next iteration
@@ -98,12 +99,12 @@ instance MemoryM Evm where
       op MSTORE8
 
       -- Decrease position by one to go left one position
-      op2 PUSH32 0x01
+      op (PUSH32 0x01)
       op SWAP1
       op SUB
 
       -- Shift number 8 bits right
-      op2 PUSH32 0x100
+      op (PUSH32 0x100)
       op SWAP1
       op SWAP2
       op DIV
@@ -167,7 +168,7 @@ allocBulk len size = do
        let fitinLength = totalMemBlockSize `div` sizeInt size -- 32 / 4 = 8 mem blocks can fit in
        memory %= M.update (updateInc size fitinLength) msize
        void $ allocBulk (len - fitinLength) size
-  return $ calcAddr msize (0 :: Integer)
+  return $ calcAddr msize 0
     where
       updateInc :: Size -> Integer -> Integer -> Maybe Integer
       updateInc _ 0 allocated = Just allocated
