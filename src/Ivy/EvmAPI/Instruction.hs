@@ -43,7 +43,6 @@ data Instruction =
   | PC
   | JUMPDEST
   | PUSH1
-  | PUSH2
   | PUSH32
   | DUP1
   | DUP2
@@ -80,7 +79,6 @@ type family Weight (instr :: Instruction) where
   Weight 'PC       = StackUpdate 0 1
   Weight 'JUMPDEST = StackUpdate 0 0
   Weight 'PUSH1    = StackUpdate 0 1
-  Weight 'PUSH2    = StackUpdate 0 1
   Weight 'PUSH32   = StackUpdate 0 1
   Weight 'DUP1     = StackUpdate 1 2
   Weight 'DUP2     = StackUpdate 2 3
@@ -113,7 +111,6 @@ toInstrCode = \case
   PC       -> (0x58, 1)
   JUMPDEST -> (0x5b, 1)
   PUSH1    -> (0x60, 2)
-  PUSH2    -> (0x61, 3)
   PUSH32   -> (0x7f, 33)
   DUP1     -> (0x80, 1)
   DUP2     -> (0x81, 1)
