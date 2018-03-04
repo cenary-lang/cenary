@@ -1,13 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Ivy.EvmAPI.Instruction where
 
@@ -18,7 +11,6 @@ import           Control.Lens hiding (op)
 import qualified Data.Text              as T
 import           Text.Printf
 import           Prelude hiding (LT, EQ, GT)
-import           GHC.TypeLits
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
 --------------------------------------------------------------------------------
@@ -56,39 +48,6 @@ data Instruction =
   deriving Show
 
 type Opcode = Integer
-
-data StackUpdate :: Nat -> Nat -> *
-
-type family Weight (instr :: Instruction) where
-  Weight 'STOP     = StackUpdate 0 0
-  Weight 'ADD      = StackUpdate 2 1
-  Weight 'MUL      = StackUpdate 2 1
-  Weight 'SUB      = StackUpdate 2 1
-  Weight 'DIV      = StackUpdate 2 1
-  Weight 'MOD      = StackUpdate 2 1
-  Weight 'GT       = StackUpdate 2 1
-  Weight 'LT       = StackUpdate 2 1
-  Weight 'EQ       = StackUpdate 2 1
-  Weight 'ISZERO   = StackUpdate 1 1
-  Weight 'POP      = StackUpdate 1 0
-  Weight 'MLOAD    = StackUpdate 1 1
-  Weight 'MSTORE   = StackUpdate 2 0
-  Weight 'MSTORE8  = StackUpdate 2 0
-  Weight 'JUMP     = StackUpdate 1 0
-  Weight 'JUMPI    = StackUpdate 2 1
-  Weight 'PC       = StackUpdate 0 1
-  Weight 'JUMPDEST = StackUpdate 0 0
-  Weight 'PUSH1    = StackUpdate 0 1
-  Weight 'PUSH32   = StackUpdate 0 1
-  Weight 'DUP1     = StackUpdate 1 2
-  Weight 'DUP2     = StackUpdate 2 3
-  Weight 'SWAP1    = StackUpdate 2 2
-  Weight 'SWAP2    = StackUpdate 3 3
-  Weight 'LOG0     = StackUpdate 2 0
-  Weight 'LOG1     = StackUpdate 3 0
-  Weight 'LOG2     = StackUpdate 4 0
-  Weight 'RETURN   = StackUpdate 2 0
-  Weight 'ADDRESS  = StackUpdate 0 1
 
 toInstrCode :: Instruction -> (Opcode, Integer)
 toInstrCode = \case
