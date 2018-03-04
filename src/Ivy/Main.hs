@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module Ivy.Main (main, parse, codegen) where
+module Ivy.Main (main, parse, initCodegenState, codegen, AST, Error) where
 
 ------------------------------------------------------
 import           Control.Error.Util (hoistEither)
@@ -9,8 +9,8 @@ import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import           Data.Text as T
-import           Data.Text.IO as T
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           System.IO (hClose)
 import           System.Process
 import           Text.Parsec (ParseError)
@@ -37,6 +37,7 @@ instance Show Error where
 
 codegenFundef :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
 codegenFundef initState stmts = do
+  unless main_exists $ throwError $ Codegen $ MainFunctionDoesNotExist
   case execStateT (runEvm action) initState of
     Left (Codegen -> err) -> throwError err
     Right state           -> return state
@@ -44,11 +45,14 @@ codegenFundef initState stmts = do
     action = do
       mapM_ C.codegenFunDef stmts
       C.codegenFunCall "main" []
+    main_exists = any (\(S.FunStmt name _ _ _) -> name == "main") stmts
 
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
 codegen state = fmap (T.pack . generateByteCode . _program) . hoistEither . codegenFundef state
 
-parse :: MonadIO m => T.Text -> ExceptT Error m [S.FunStmt]
+type AST = [S.FunStmt]
+
+parse :: MonadIO m => T.Text -> ExceptT Error m AST
 parse code =
   case P.parse code of
     Left (Parsing -> err) -> throwError err
@@ -58,7 +62,7 @@ execByteCode :: MonadIO m => T.Text -> m ()
 execByteCode byteCode = do
   (_, Just hout, _, _) <- liftIO $ createProcess
     (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]) { std_out = CreatePipe }
-  void $ liftIO (hGetContents hout) <* liftIO (hClose hout)
+  void $ liftIO (T.hGetContents hout) <* liftIO (hClose hout)
 
 -- Given the address of the deployer, prepares the environment
 initEnv :: Integer -> Env
@@ -101,6 +105,6 @@ main = do
           parse code >>= codegen initCodegenState >>= liftIO . T.writeFile "yis"
           (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
           liftIO $ do
-            T.putStrLn =<< hGetContents hout
+            T.putStrLn =<< T.hGetContents hout
             callProcess "rm" ["yis"]
             hClose hout

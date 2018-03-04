@@ -57,7 +57,8 @@ data ErrorDetails = NoDetails
                   deriving Show -- TODO: we can use a manual instance declaration, actually.
 
 data CodegenError =
-    VariableNotDeclared String ErrorDetails
+    MainFunctionDoesNotExist
+  | VariableNotDeclared String ErrorDetails
   | VariableAlreadyDeclared String
   | VariableNotDefined String
   | TypeMismatch String PrimType PrimType
@@ -116,6 +117,7 @@ instance Show CodegenError where
   show (NonInitializedArrayAccess name) = "Array " <> name <> " is not initialized yet, and you wanted to access an element of it"
   show (IllegalArrAccess name ty) = "You wanted to access to variable " <> name <> " as if it's an array, but it's type is " <> show ty
   show NoReturnStatement = "Functions should have return statement as their last statement"
+  show MainFunctionDoesNotExist = "Main function does not exist"
 
 data Size =
     Size_1
