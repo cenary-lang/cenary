@@ -1,34 +1,35 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE RecursiveDo                #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import           Control.Lens                   hiding (Context, assign, op, index)
+import           Control.Arrow          ((***))
+import           Control.Lens           hiding (Context, assign, index, op)
 import           Control.Monad.Except
-import           Control.Arrow                  ((***))
-import           Control.Monad.State hiding (state)
-import           Data.Char                      (ord)
-import           Data.Either.Combinators        (eitherToError)
-import qualified Data.Map                       as M
-import           Data.Monoid                    ((<>))
-import           Prelude                        hiding (log, lookup, LT, EQ, GT, until, pred)
+import           Control.Monad.State    hiding (state)
+import           Data.Char              (ord)
+import qualified Data.Map               as M
+import           Data.Monoid            ((<>))
+import           Prelude                hiding (EQ, GT, LT, log, lookup, pred,
+                                         until)
 --------------------------------------------------------------------------------
+import           Debug.Trace
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
--- import           Ivy.Parser
 import           Ivy.Syntax
-import Debug.Trace
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -44,7 +45,7 @@ instance ContextM Evm where
   updateCtx f =
     env %= (id *** updateCtx')
       where
-        updateCtx' [] = []
+        updateCtx' []       = []
         updateCtx' (ctx:xs) = f ctx : xs
   lookup name =
     go =<< snd <$> use env
@@ -86,7 +87,7 @@ binOp t instr left right = do
   load (sizeof TInt) left
   op instr
   addr <- alloc (sizeof t)
-  op2 PUSH32 addr
+  op (PUSH32 addr)
   storeMultibyte (sizeof t)
   return (Operand t addr)
 
@@ -128,18 +129,18 @@ declVar ty name =
 codegenStmt :: CodegenM m => Stmt -> m ()
 codegenStmt (STimes until block) = do
   -- Assign target value
-  op2 PUSH32 until
+  op (PUSH32 until)
   op JUMPDEST
 
   -- Prepare true value of current PC
   op PC
-  op2 PUSH32 0x01
+  op (PUSH32 0x01)
   op SWAP1
   op SUB
 
   -- Decrease target value
   op SWAP1
-  op2 PUSH32 0x01
+  op (PUSH32 0x01)
   op SWAP1
   op SUB
 
@@ -161,42 +162,43 @@ codegenStmt (SWhile pred block) = do
   op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
 
   -- Don't enter the loop if predicate is already false
-  predOffset <- estimateOffsetExpr pred
-  blockOffset <- estimateOffset block
+  -- predOffset <- estimateOffsetExpr pred
+  -- blockOffset <- estimateOffset block
 
   -- FIXME: This instruction set depends on implementation of `load` method. Find a way!
-  let costToWhile = pcCosts [PC, ADD, JUMPI, JUMPDEST, PC, PUSH32, SWAP1, SUB, SWAP1, POP, PUSH32, PUSH32, MLOAD, DIV, SWAP1, DUP1, SWAP2, SWAP1, JUMPI] + blockOffset + predOffset
-  op2 PUSH32 costToWhile
-  op PC
-  op ADD
-  op JUMPI
+  -- let costToWhile = pcCosts [PC, ADD, JUMPI, JUMPDEST, PC, PUSH32 0, SWAP1, SUB, SWAP1, POP, PUSH32 0, PUSH32 0, MLOAD, DIV, SWAP1, DUP1, SWAP2, SWAP1, JUMPI] + blockOffset + predOffset
+  rec op (PUSH32 whileOut)
+      -- op PC
+      -- op ADD
+      op JUMPI
 
-  -- Loop start
-  op JUMPDEST
+      -- Loop start
+      op JUMPDEST
 
-  -- Prepare true value of current PC
-  op PC
-  op2 PUSH32 0x01
-  op SWAP1
-  op SUB
+      -- Prepare true value of current PC
+      op PC
+      op (PUSH32 0x01)
+      op SWAP1
+      op SUB
 
-  -- Code body
-  executeBlock block
+      -- Code body
+      executeBlock block
 
-  -- Load predicate again
-  op SWAP1
-  op POP
-  Operand predTy' predAddr' <- codegenExpr pred
-  checkTyEq "index_of_while_pred" TBool predTy'
-  load (sizeof TBool) predAddr'
-  op SWAP1
+      -- Load predicate again
+      op SWAP1
+      op POP
+      Operand predTy' predAddr' <- codegenExpr pred
+      checkTyEq "index_of_while_pred" TBool predTy'
+      load (sizeof TBool) predAddr'
+      op SWAP1
 
-  -- Jump to destination back if target value is nonzero
-  op DUP1
-  op SWAP2
-  op SWAP1
-  op JUMPI
-  op JUMPDEST
+      -- Jump to destination back if target value is nonzero
+      op DUP1
+      op SWAP2
+      op SWAP1
+      op JUMPI
+      whileOut <- jumpdest
+  pure ()
 
 codegenStmt (SAssignment name val) = do
   Operand tyR addr <- codegenExpr val
@@ -215,9 +217,9 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       load (sizeof aTy) addr
 
       load (sizeof TInt) iAddr
-      op2 PUSH32 (sizeInt (sizeof aTy))
+      op (PUSH32 (sizeInt (sizeof aTy)))
       op MUL
-      op2 PUSH32 oldAddr
+      op (PUSH32 oldAddr)
       op ADD
 
       storeMultibyte (sizeof aTy)
@@ -237,14 +239,15 @@ codegenStmt (SIf ePred bodyBlock) = do
   load (sizeof TBool) addrPred
   op ISZERO -- Negate for jumping condition
 
-  offset <- estimateOffset bodyBlock
-  op2 PUSH32 (offset + 3) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.
-  op PC
-  op ADD
-  op JUMPI
+  -- offset <- estimateOffset bodyBlock
+  rec op (PUSH32 ifOut) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.)
+      -- op PC
+      -- op ADD
+      op JUMPI
 
-  void $ executeBlock bodyBlock
-  op JUMPDEST
+      void $ executeBlock bodyBlock
+      ifOut <- jumpdest
+  pure ()
 
 codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
@@ -253,65 +256,65 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   load (sizeof TBool) addrPred
   op ISZERO -- Negate for jumping condition
 
-  trueOffset <- estimateOffset trueBlock
-  let trueJumpDest = pcCost PC + pcCost ADD + pcCost JUMPI + trueOffset + pcCost PUSH32 + pcCost PC + pcCost ADD + pcCost JUMP
+  -- trueOffset <- estimateOffset trueBlock
+  rec -- let trueJumpDest = pcCosts [PC, ADD, JUMPI, PUSH32 0, PC, ADD, JUMP] + trueOffset
+      op (PUSH32 trueDest)
+      -- op PC
+      -- op ADD
+      op JUMPI
 
-  op2 PUSH32 trueJumpDest
-  op PC
-  op ADD
-  op JUMPI
+      executeBlock trueBlock
+      -- falseOffset <- estimateOffset falseBlock
 
-  executeBlock trueBlock
-  falseOffset <- estimateOffset falseBlock
+      -- let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
+      op (PUSH32 falseDest)
+      -- op PC
+      -- op ADD
+      op JUMP
 
-  let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
-  op2 PUSH32 falseJumpDest
-  op PC
-  op ADD
-  op JUMP
-
-  op JUMPDEST
-  executeBlock falseBlock
-  op JUMPDEST
+      trueDest <- jumpdest
+      executeBlock falseBlock
+      falseDest <- jumpdest
+  pure ()
 
 codegenStmt (SReturn retExpr) =
   void (codegenExpr retExpr)
 
 codegenStmt (SExpr expr) = void (codegenExpr expr)
 
-estimateOffsetExpr :: (MonadError CodegenError m, MonadState CodegenState m) => Expr -> m Integer
-estimateOffsetExpr expr =
-  get >>= eitherToError . go
-    where
-      go :: CodegenState -> Either CodegenError Integer
-      go state =
-        let oldPc = _pc state
-            result = execStateT (runEvm (codegenExpr expr)) state
-        in
-          case result of
-            Left err -> Left err
-            Right newState -> Right (_pc newState - oldPc)
+-- estimateOffsetExpr :: (MonadError CodegenError m, MonadState CodegenState m) => Expr -> m Integer
+-- estimateOffsetExpr expr =
+--   get >>= eitherToError . go
+--     where
+--       go :: CodegenState -> Either CodegenError Integer
+--       go state =
+--         let oldPc = _pc state
+--             result = execStateT (runEvm (codegenExpr expr)) state
+--         in
+--           case result of
+--             Left err -> Left err
+--             Right newState -> Right (_pc newState - oldPc)
 
-estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
-estimateOffset block =
-  get >>= eitherToError . go block
-    where
-      go :: Block -> CodegenState -> Either CodegenError Integer
-      go (Block []) _ = Right 0
-      go (Block (stmt:xs)) state =
-        let oldPc = _pc state
-            result = execStateT (runEvm (codegenStmt stmt)) state
-        in
-          case result of
-            Left err -> Left err
-            Right newState -> do
-              let newPc = _pc newState
-              let diff = newPc - oldPc
-              (+ diff) <$> go (Block xs) newState
+-- estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
+-- estimateOffset block =
+--   get >>= eitherToError . go block
+--     where
+--       go :: Block -> CodegenState -> Either CodegenError Integer
+--       go (Block []) _ = Right 0
+--       go (Block (stmt:xs)) state =
+--         let oldPc = _pc state
+--             result = execStateT (runEvm (codegenStmt stmt)) state
+--         in
+--           case result of
+--             Left err -> Left err
+--             Right newState -> do
+--               let newPc = _pc newState
+--               let diff = newPc - oldPc
+--               (+ diff) <$> go (Block xs) newState
 
 -- | This type alias will be used for top-level codegen, since
 -- at top level we use all contexts
-type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m)
+type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
 data TOperand a = TOperand Addr
 
@@ -321,10 +324,10 @@ tbinop instr ty (TOperand addrl) (TOperand addrr) = do
   load (sizeof ty) addrr
   op instr
   addr <- alloc (sizeof ty)
-  op2 PUSH32 addr
+  op (PUSH32 addr)
   storeMultibyte (sizeof ty)
   return (TOperand addr)
-     
+
 type BinOp a = forall m. CodegenM m => TOperand a -> TOperand a -> m (TOperand a)
 
 (+:) :: BinOp Int
@@ -352,17 +355,18 @@ codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt name args block retTyAnnot) = do
   trace ("registering: " ++ show name) (return ())
   registerFunction name args
-  offset <- estimateOffset block
-  op2 PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
-  op PC
-  op ADD
-  op JUMP
-  funPc <- use pc
-  op JUMPDEST
-  Operand retTy retAddr <- executeFunBlock block
-  checkTyEq "function definition" retTyAnnot retTy
-  op JUMP -- Before calling function, we push PC, so we remember and jump to it
-  op JUMPDEST
+  -- offset <- estimateOffset block
+  -- op $ PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
+  rec op $ PUSH32 functionOut
+      -- op PC
+      -- op ADD
+      op JUMP
+      funPc <- use pc
+      op JUMPDEST
+      Operand retTy retAddr <- executeFunBlock block
+      checkTyEq "function definition" retTyAnnot retTy
+      op JUMP -- Before calling function, we push PC, so we remember and jump to it
+      functionOut <- jumpdest
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
     where
@@ -397,14 +401,13 @@ codegenFunCall name args = do
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
     FunDef retTy funAddr retAddr -> do
       -- Preparing checkpoint
-      op PC
-      op2 PUSH32 (pcCosts [PUSH32, JUMP, PUSH32, JUMP, JUMPDEST])
-      op ADD
+      -- op (PUSH32 (pcCosts [PUSH32 0, JUMP, PUSH32 0, JUMP, JUMPDEST]))
+      rec op (PUSH32 funcDest)
 
-      -- Jumping to function
-      op2 PUSH32 funAddr
-      op JUMP
-      op JUMPDEST
+          -- Jumping to function
+          op (PUSH32 funAddr)
+          op JUMP
+          funcDest <- jumpdest
 
       return (Operand retTy retAddr)
 
@@ -454,9 +457,9 @@ codegenExpr (EBinop binop expr1 expr2) = do
         OpSub -> binOp TInt SUB left right
         OpDiv -> binOp TInt DIV left right
         OpMod -> binOp TInt MOD left right
-        OpGt -> binOp TBool GT left right
-        OpLt -> binOp TBool LT left right
-        OpEq -> binOp TBool EQ left right
+        OpGt  -> binOp TBool GT left right
+        OpLt  -> binOp TBool LT left right
+        OpEq  -> binOp TBool EQ left right
     _ -> throwError $ WrongOperandTypes ty1 ty2
 
 codegenExpr (EArray len elemExprs) = do

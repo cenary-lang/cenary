@@ -1,23 +1,54 @@
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE GADTs            #-}
 
 module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
-import           Control.Lens                   hiding (Context)
+import           Control.Lens         hiding (Context)
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.Map                       as M
-import           Data.Semigroup                 ((<>))
-import qualified Data.Text                      as T
+import qualified Data.Map             as M
+import           Data.Semigroup       ((<>))
+import qualified Data.Sequence        as Seq
 --------------------------------------------------------------------------------
-import           Ivy.Syntax                     (Expr, PrimType (..), Stmt)
+import           Ivy.Syntax           (Expr, PrimType (..), Stmt)
 --------------------------------------------------------------------------------
+
+data Instruction =
+    STOP
+  | ADD
+  | MUL
+  | SUB
+  | DIV
+  | MOD
+  | GT
+  | LT
+  | EQ
+  | ISZERO
+  | POP
+  | MLOAD
+  | MSTORE
+  | MSTORE8
+  | JUMP
+  | JUMPI
+  | PC
+  | JUMPDEST
+  | PUSH32 Integer
+  | DUP1
+  | DUP2
+  | SWAP1
+  | SWAP2
+  | LOG0
+  | LOG1
+  | LOG2
+  | RETURN
+  | ADDRESS
+  deriving Show
 
 data ErrorDetails = NoDetails
                   | ExprDetails Expr
@@ -118,19 +149,31 @@ type MemPointers = M.Map Size MemBlock
 
 type FuncRegistry = M.Map String [(PrimType, String, Integer)]
 
+-- | TODO: This should have its own module
+newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }
+
+makeLenses ''Program
+
+initProgram :: Program
+initProgram = Program Seq.empty
+
+
+addInstr :: Instruction -> Program -> Program
+addInstr instr p = p & unProgram %~ (instr <|)
+
 data CodegenState = CodegenState
-  { _byteCode         :: !T.Text
-  , _memPointers      :: !MemPointers
-  , _env              :: !Env
-  , _memory           :: !(M.Map Integer Integer)
-  , _pc               :: Integer
-  , _funcRegistry     :: FuncRegistry
+  { _memPointers  :: !MemPointers
+  , _env          :: !Env
+  , _memory       :: !(M.Map Integer Integer)
+  , _pc           :: Integer
+  , _funcRegistry :: FuncRegistry
+  , _program      :: Program
   }
 
 makeLenses ''CodegenState
 
 newtype Evm a = Evm { runEvm :: StateT CodegenState (Either CodegenError) a }
-  deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError)
+  deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError, MonadFix)
 
 type ScopeLevel = Int
 
