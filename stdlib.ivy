@@ -1,12 +1,7 @@
-bool even(int i) {
-  return i % 2 == 0;
-}
-
 int main() {
   int a = 9;
-  bool myval = even(a);
   char[5] name;
-  if(myval) {
+  if(true) {
     name = "yigit";
   } else {
     name = "efeee";

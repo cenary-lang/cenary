@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ViewPatterns     #-}
 
 module Ivy.EvmAPI.Instruction where
 
@@ -55,7 +56,8 @@ class Monad m => OpcodeM m where
   -- ^ Opcode without argument
 
 generateByteCode :: Program -> String
-generateByteCode (Program instructions) = foldr (\instr bc -> bc <> to_bytecode instr) "" instructions
+generateByteCode (interceptWithLogs -> Program instructions) =
+  foldr (\instr bc -> bc <> to_bytecode instr) "" instructions
   where
     to_bytecode :: Instruction -> String
     to_bytecode instr =
@@ -66,6 +68,11 @@ generateByteCode (Program instructions) = foldr (\instr bc -> bc <> to_bytecode 
         pushed_vals = case instr of
                       PUSH32 val -> printf "%064x" val
                       _          -> ""
+
+interceptWithLogs :: Program -> Program
+interceptWithLogs = addInstr LOG0
+                  . addInstr (PUSH32 0x0)
+                  . addInstr (PUSH32 0x100)
 
 instance OpcodeM Evm where
   op instr = do

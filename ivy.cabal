@@ -64,3 +64,23 @@ test-suite tests
       ivy,
       mtl,
       text
+
+executable ivy
+    build-depends:
+      ivy,
+      base >=4.9 && <4.10,
+      containers,
+      either,
+      errors,
+      lens,
+      monad-logger,
+      mtl,
+      optparse-applicative,
+      parsec,
+      parsec-numbers,
+      pretty-simple,
+      process,
+      template-haskell,
+      text
+    main-is: src/Main.hs
+    default-language: Haskell2010

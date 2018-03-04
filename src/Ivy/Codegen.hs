@@ -253,7 +253,6 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
 
   load (sizeof TBool) addrPred
   op ISZERO -- Negate for jumping condition
-
   -- trueOffset <- estimateOffset trueBlock
   rec -- let trueJumpDest = pcCosts [PC, ADD, JUMPI, PUSH32 0, PC, ADD, JUMP] + trueOffset
       op (PUSH32 trueDest)
