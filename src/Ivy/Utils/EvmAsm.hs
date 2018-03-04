@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Utils.EvmAsm where
+module Ivy.Utils.EvmAsm where
 
 --------------------------------------------------------------------------------
 import           Data.Functor

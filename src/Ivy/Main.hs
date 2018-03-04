@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module Main where
+module Ivy.Main (main, parse, codegen) where
 
 ------------------------------------------------------
 import           Control.Error.Util (hoistEither)
@@ -23,8 +23,8 @@ import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
 import           Ivy.EvmAPI.Instruction (generateByteCode)
 import qualified Ivy.Parser as P
 import qualified Ivy.Syntax as S
-import           Options (Mode (..), Options (..), parseOptions)
-import           Utils.EvmAsm (asm)
+import           Ivy.Options (Mode (..), Options (..), parseOptions)
+import           Ivy.Utils.EvmAsm (asm)
 ------------------------------------------------------
 
 data Error =

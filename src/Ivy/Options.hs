@@ -1,4 +1,4 @@
-module Options where
+module Ivy.Options where
 
 ------------------------------------------------------
 import           Control.Applicative
