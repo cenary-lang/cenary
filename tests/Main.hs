@@ -23,11 +23,23 @@ type SourceFile = FilePath
 
 assertions :: [(String, Assertion, SourceFile)]
 assertions =
-  [ ("Should not parse source with corrupted syntax", ShouldParse ShouldNotCodegen, "Corrupted.ivy")
-  , ("Should be able to generate code for function calls", ShouldParse (ShouldCodegen (T.isInfixOf "yigit")), "FunCall.ivy")
+  [ ( "Should not parse source with corrupted syntax"
+    , ShouldParse ShouldNotCodegen
+    , "Corrupted.ivy"
+    )
+  , ( "Should be able to generate code for if statements"
+    , ShouldParse (ShouldCodegen (T.isInfixOf "yigit"))
+    , "FunCall.ivy"
+    )
     -- Computes 15th element of fibonacci series. 0x0262 = 610d
-  , ("Should calculate 15th element of Fibonacci series as 610", ShouldParse (ShouldCodegen (T.isInfixOf "02 62")), "Fibonacci.ivy")
-  , ("Should NOT calculate 15th element of Fibonacci series as 611", ShouldParse (ShouldCodegen (not . T.isInfixOf "02 63")), "Fibonacci.ivy")
+  , ( "Should calculate 15th element of Fibonacci series as 610"
+    , ShouldParse (ShouldCodegen (T.isInfixOf "02 62"))
+    , "Fibonacci.ivy"
+    )
+  , ("Should NOT calculate 15th element of Fibonacci series as 611"
+    , ShouldParse (ShouldCodegen (not . T.isInfixOf "02 63"))
+    , "Fibonacci.ivy"
+    )
   ]
 
 main :: IO ()
