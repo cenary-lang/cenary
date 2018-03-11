@@ -92,6 +92,7 @@ initCodegenState =
     , _pc               = 0
     , _funcRegistry     = M.empty
     , _program          = initProgram
+    , _funcOffset       = 0
     }
 
 data Environment =

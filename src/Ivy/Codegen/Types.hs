@@ -175,6 +175,7 @@ data CodegenState = CodegenState
   , _pc           :: !Integer
   , _funcRegistry :: !FuncRegistry
   , _program      :: Program
+  , _funcOffset   :: !Integer
   }
 
 makeLenses ''CodegenState

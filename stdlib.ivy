@@ -1,3 +1,20 @@
-int sum(int a, int b) {
-  return a + b;
+int addvals(int x, int y) {
+  return x + y;
+}
+
+int identity(int k) {
+  return k;
+}
+
+int fib(int n) {
+  int a = 0;
+  int b = 1;
+  int sum = 6;
+  while (n > 1) {
+    sum = a + b;
+    a = b;
+    b = sum;
+    n = n - 1;
+  };
+  return sum;
 }

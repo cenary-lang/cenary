@@ -161,14 +161,15 @@ codegenStmt (SWhile pred block) = do
   load predAddr
   op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
 
-  rec op (PUSH32 whileOut)
+  offset <- use funcOffset
+  rec op (PUSH32 (whileOut - offset))
       op JUMPI
 
       -- Loop start
       loopStart <- jumpdest
 
       -- Prepare true value of current PC
-      op (PUSH32 loopStart)
+      op (PUSH32 (loopStart - offset))
 
       -- Code body
       executeBlock block
@@ -308,20 +309,26 @@ registerFunction name args = do
     where
       allocArg :: Integer -> (PrimType, Name) -> m Integer
       allocArg paramOrder (ty, argName) = do
-        let addr = paramOrder * 0x20
+        addr <- alloc (sizeof ty)
         declVar ty argName
         assign ty argName addr
         pure (paramOrder + 1)
+
+resetMemory :: CodegenM m => m ()
+resetMemory = do
+  memory .= initMemory
+  memPointer .= 0
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
   case keccak256 sig of
     Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
     Just fnNameHash -> do
+      resetMemory
       registerFunction name args
       rec
           -- Function's case statement. If name does not match, we don't enter to this function.
-          functionBegin <- use pc
+          offset <- use funcOffset
           op (PUSH4 fnNameHash)
           op (PUSH1 0xe0)
           op (PUSH1 0x02)
@@ -331,7 +338,7 @@ codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
           op DIV
           op EQ
           op ISZERO
-          op (PUSH32 (functionOut - functionBegin))
+          op (PUSH32 (functionOut - offset))
           op JUMPI
 
           -- Store parameters
@@ -474,6 +481,7 @@ codegenPhases :: CodegenM m => [FunStmt] -> m ()
 codegenPhases functions = do
   rec initPhase (afterFunctions - afterInit)
       afterInit <- use pc
+      funcOffset .= afterInit
       bodyPhase functions
       afterFunctions <- use pc
   pure ()
