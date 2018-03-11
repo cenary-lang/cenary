@@ -9,3 +9,4 @@ dist
 *.synctex.gz
 *.toc
 tags
+.hasktags
