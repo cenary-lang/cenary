@@ -20,14 +20,17 @@ import           Control.Lens hiding (Context, assign, index, op)
 import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
+import           Data.Foldable (traverse_)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
+import Data.Functor (($>))
 import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.EvmAPI.Instruction
 import           Ivy.Syntax
+import Ivy.Crypto.Keccak (keccak256)
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -322,42 +325,71 @@ type BinOp a = forall m. CodegenM m => TOperand a -> TOperand a -> m (TOperand a
 
 registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
 registerFunction name args = do
-  allocatedArgs <- mapM allocArg args
-  funcRegistry %= M.insert name allocatedArgs
+  foldM_ allocArg 0 args
+  -- funcRegistry %= M.insert name allocatedArgs
     where
-      allocArg :: (PrimType, Name) -> m (PrimType, Name, Integer)
-      allocArg (ty, argName) = do
-        addr <- alloc (sizeof ty)
+      allocArg :: Integer -> (PrimType, Name) -> m Integer
+      allocArg paramOrder (ty, argName) = do
+        let addr = paramOrder * 0x20
         declVar ty argName
         assign ty argName addr
-        return (ty, argName, addr)
+        pure (paramOrder + 1)
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
-codegenFunDef (FunStmt name args block retTyAnnot) = do
-  registerFunction name args
-  -- offset <- estimateOffset block
-  -- op $ PUSH32 $ pcCosts [PC, ADD, JUMP, JUMPDEST, JUMP] + offset
-  rec op $ PUSH32 functionOut
-      -- op PC
-      -- op ADD
-      op JUMP
-      funPc <- use pc
-      op JUMPDEST
-      Operand retTy retAddr <- executeFunBlock block
-      checkTyEq "function definition" retTyAnnot retTy
-      op JUMP -- Before calling function, we push PC, so we remember and jump to it
-      functionOut <- jumpdest
-  updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
-  return ()
+codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
+  case keccak256 sig of
+    Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
+    Just fnNameHash -> do
+      registerFunction name args
+      rec
+          -- Function's case statement. If name does not match, we don't enter to this function.
+          functionBegin <- use pc
+          op (PUSH4 fnNameHash)
+          op (PUSH1 0xe0)
+          op (PUSH1 0x02)
+          op EXP
+          op (PUSH1 0x00)
+          op CALLDATALOAD
+          op DIV
+          op EQ
+          op ISZERO
+          op (PUSH32 (functionOut - functionBegin))
+          op JUMPI
+
+          -- Store parameters
+          storeParameters args
+            
+          -- Function body
+          funPc <- use pc
+          Operand retTy retAddr <- executeFunBlock block
+          checkTyEq "function definition" retTyAnnot retTy
+          functionOut <- jumpdest
+      updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
+      return ()
     where
       executeFunBlock :: forall m. CodegenM m => Block -> m Operand
-      executeFunBlock (Block stmts) = do
-        go stmts
-          where
-            go :: [Stmt] -> m Operand
-            go []             = throwError NoReturnStatement
-            go [SReturn expr] = codegenExpr expr
-            go (stmt:xs)      = codegenStmt stmt >> go xs
+      executeFunBlock (Block stmts) = go stmts
+        where
+          go :: [Stmt] -> m Operand
+          go []             = throwError NoReturnStatement
+          go [SReturn expr] = do
+            operand@(Operand ty addr) <- codegenExpr expr
+            op (PUSH32 (addr + 0x20))
+            op (PUSH32 addr)
+            op RETURN
+            return operand
+          go (stmt:xs)      = codegenStmt stmt >> go xs
+
+      storeParameters :: forall m. CodegenM m => [(PrimType, Name)] -> m ()
+      storeParameters = foldM_ storeParamsFold (0x04, 0x00)
+
+      storeParamsFold :: forall m. CodegenM m => (Integer, Integer) -> (PrimType, Name) -> m (Integer, Integer)
+      storeParamsFold (paramOffset, memOffset) (_ty, _name) =
+           op (PUSH32 paramOffset)
+        *> op CALLDATALOAD
+        *> op (PUSH32 memOffset)
+        *> op MSTORE
+        $> (paramOffset + 0x20, memOffset + 0x20)
 
 takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
 takeArgsToContext funcName registryArgs callerArgs = do
@@ -459,3 +491,32 @@ codegenExpr (EArray len elemExprs) = do
       if x ^. operandType == ty
         then testOperandsHasTy ty xs
         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
+
+codegenPhases :: CodegenM m => [FunStmt] -> m ()
+codegenPhases functions = do
+  rec initPhase (afterFunctions - afterInit)
+      afterInit <- use pc
+      bodyPhase functions
+      afterFunctions <- use pc
+  pure ()
+
+initPhase :: Integer -> CodegenM m => m ()
+initPhase functionCosts = do
+  rec op (PUSH32 functionCosts)
+      op DUP1
+      op (PUSH32 initCost)
+      op (PUSH32 0x00)
+      op CODECOPY
+      op (PUSH32 0x00)
+      op RETURN
+      op STOP
+      initCost <- use pc
+  pure ()
+
+bodyPhase
+  :: CodegenM m
+  -- => Integer
+  -- ^ Offset caused by initPhase.
+  => [FunStmt]
+  -> m ()
+bodyPhase = traverse_ codegenFunDef

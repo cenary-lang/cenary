@@ -7,6 +7,7 @@ module Ivy.Main where
 import           Control.Error.Util (hoistEither)
 import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
+import           Data.Bifunctor (bimap)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -21,9 +22,9 @@ import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
                                     Sig (..), initProgram, runEvm)
 import           Ivy.EvmAPI.Instruction (generateByteCode)
+import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import qualified Ivy.Parser as P
 import qualified Ivy.Syntax as S
-import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import           Ivy.Utils.EvmAsm (asm)
 ------------------------------------------------------
 
@@ -35,20 +36,25 @@ instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Compile Error: " <> show err
 
-codegenFundef :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
-codegenFundef initState stmts = do
-  unless main_exists $ throwError $ Codegen $ MainFunctionDoesNotExist
-  case execStateT (runEvm action) initState of
-    Left (Codegen -> err) -> throwError err
-    Right state           -> return state
-  where
-    action = do
-      mapM_ C.codegenFunDef stmts
-      C.codegenFunCall "main" []
-    main_exists = any (\(S.FunStmt name _ _ _) -> name == "main") stmts
+-- codegenFundef :: [S.FunStmt] -> ExceptT Error (StateT CodegenState Identity ())
+-- codegenFundef stmts = do
+--   unless main_exists $ throwError $ Codegen $ MainFunctionDoesNotExist
+--   action
+--   -- case execStateT (runEvm action) initState of
+--   --   Left (Codegen -> err) -> throwError err
+--   --   Right state           -> return state
+--   where
+--     action = do
+--       traverse_ C.codegenFunDef stmts
+--       C.codegenFunCall "main" []
+--     main_exists = any (\(S.FunStmt name _ _ _) -> name == "main") stmts
 
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
-codegen state = fmap (T.pack . generateByteCode . _program) . hoistEither . codegenFundef state
+codegen initState functions =
+  fmap (T.pack . generateByteCode . _program)
+    $ hoistEither
+    $ bimap Codegen id
+    $ execStateT (runEvm (C.codegenPhases functions)) initState
 
 type AST = [S.FunStmt]
 
@@ -60,8 +66,8 @@ parse code =
 
 execByteCode :: MonadIO m => T.Text -> m T.Text
 execByteCode byteCode = do
-  (_, _, Just hout, _) <- liftIO $ createProcess
-    (proc "evm" ["--debug", "--code", T.unpack byteCode, "run", "2> out.log"]) { std_err = CreatePipe }
+  (_, Just hout, _, _) <- liftIO $ createProcess
+    (proc "evm" ["--debug", "--code", T.unpack byteCode, "run", "2> out.log"]) { std_out = CreatePipe }
   liftIO $ T.hGetContents hout <* hClose hout
 
 -- Given the address of the deployer, prepares the environment

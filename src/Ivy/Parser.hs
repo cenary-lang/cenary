@@ -228,7 +228,7 @@ sFunDef = do
   char' ')'
   whitespace
   body <- curlied block
-  return (FunStmt name args body retType)
+  return (FunStmt (FunSig name args) body retType)
   <?> "function definition"
 
 eFunCall :: Parser Expr

@@ -38,8 +38,13 @@ data Instruction =
   | JUMPI
   | PC
   | JUMPDEST
+  | CODECOPY
+  | PUSH1 Integer
+  | PUSH4 Integer
   | PUSH32 Integer
   | DUP1
+  | EXP
+  | CALLDATALOAD
   | DUP2
   | SWAP1
   | SWAP2
