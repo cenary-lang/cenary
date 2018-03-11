@@ -84,12 +84,12 @@ instance TcM Evm where
 
 binOp :: (OpcodeM m, MemoryM m) => PrimType -> Instruction -> Integer -> Integer -> m Operand
 binOp t instr left right = do
-  load (sizeof TInt) right
-  load (sizeof TInt) left
+  load right
+  load left
   op instr
   addr <- alloc (sizeof t)
-  op (PUSH32 addr)
-  storeMultibyte (sizeof t)
+  push addr
+  store
   return (Operand t addr)
 
 executeBlock :: CodegenM m => Block -> m ()
@@ -112,7 +112,7 @@ assign tyR name addr =
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
     Def tyL oldAddr -> do
       checkTyEq name tyL tyR
-      storeAddressed (sizeof tyL) addr oldAddr
+      storeAddressed addr oldAddr
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
 
 declVar
@@ -158,7 +158,7 @@ codegenStmt (SWhile pred block) = do
   Operand predTy predAddr <- codegenExpr pred
   checkTyEq "index_of_while_pred" TBool predTy
 
-  load (sizeof TBool) predAddr
+  load predAddr
   op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
 
   rec op (PUSH32 whileOut)
@@ -176,7 +176,7 @@ codegenStmt (SWhile pred block) = do
       -- Load predicate again
       Operand predTy' predAddr' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
-      load (sizeof TBool) predAddr'
+      load predAddr'
       -- op SWAP1
 
       -- Jump to destination back if target value is nonzero
@@ -199,15 +199,14 @@ codegenStmt stmt@(SArrAssignment name index val) = do
     Def (TArray _length aTy) oldAddr -> do
       checkTyEq name aTy tyR
 
-      load (sizeof aTy) addr
+      load addr
 
-      load (sizeof TInt) iAddr
+      load iAddr
       op (PUSH32 (sizeInt (sizeof aTy)))
       op MUL
       op (PUSH32 oldAddr)
       op ADD
-
-      storeMultibyte (sizeof aTy)
+      store
     Def other _ -> throwError $ InternalError $ "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation: " <> show other
 
 codegenStmt (SVarDecl ty name) =
@@ -221,7 +220,7 @@ codegenStmt (SIf ePred bodyBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
 
-  load (sizeof TBool) addrPred
+  load addrPred
   op ISZERO -- Negate for jumping condition
 
   -- offset <- estimateOffset bodyBlock
@@ -238,7 +237,7 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
-  load (sizeof TBool) addrPred
+  load addrPred
   op ISZERO -- Negate for jumping condition
   -- trueOffset <- estimateOffset trueBlock
   rec -- let trueJumpDest = pcCosts [PC, ADD, JUMPI, PUSH32 0, PC, ADD, JUMP] + trueOffset
@@ -301,27 +300,6 @@ codegenStmt (SExpr expr) = void (codegenExpr expr)
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
 data TOperand a = TOperand Addr
-
-tbinop :: CodegenM m => Instruction -> PrimType -> TOperand a -> TOperand a -> m (TOperand a)
-tbinop instr ty (TOperand addrl) (TOperand addrr) = do
-  load (sizeof ty) addrl
-  load (sizeof ty) addrr
-  op instr
-  addr <- alloc (sizeof ty)
-  op (PUSH32 addr)
-  storeMultibyte (sizeof ty)
-  return (TOperand addr)
-
-type BinOp a = forall m. CodegenM m => TOperand a -> TOperand a -> m (TOperand a)
-
-(+:) :: BinOp Int
-(+:) = tbinop ADD TInt
-
-(-:) :: BinOp Int
-(-:) = tbinop SUB TInt
-
-(/:) :: BinOp Int
-(/:) = tbinop DIV TInt
 
 registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
 registerFunction name args = do
@@ -400,7 +378,7 @@ takeArgsToContext funcName registryArgs callerArgs = do
       bindArg :: ((PrimType, String, Integer), Operand) -> m ()
       bindArg ((registryTy, registryName, registryAddr), Operand callerTy callerAddr) = do
         checkTyEq registryName registryTy callerTy
-        storeAddressed (sizeof callerTy) callerAddr registryAddr
+        storeAddressed callerAddr registryAddr
 
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
@@ -445,17 +423,17 @@ codegenExpr (EArrIdentifier name index) =
 
 codegenExpr (EInt val) = do
   addr <- alloc (sizeof TInt)
-  storeVal (sizeof TInt) val addr
+  storeVal val addr
   return (Operand TInt addr)
 
 codegenExpr (EChar val) = do
   addr <- alloc (sizeof TChar)
-  storeVal (sizeof TChar) (fromIntegral (ord val)) addr
+  storeVal (fromIntegral (ord val)) addr
   return (Operand TChar addr)
 
 codegenExpr (EBool val) = do
   addr <- alloc (sizeof TBool)
-  storeVal (sizeof TBool) (boolToInt val) addr
+  storeVal (boolToInt val) addr
   return (Operand TBool addr)
 
 codegenExpr (EBinop binop expr1 expr2) = do
