@@ -164,11 +164,11 @@ addInstr :: Instruction -> Program -> Program
 addInstr instr p = p & unProgram %~ (instr <|)
 
 data CodegenState = CodegenState
-  { _memPointers  :: !MemPointers
+  { _memPointer   :: !Integer
   , _env          :: !Env
-  , _memory       :: !(M.Map Integer Integer)
-  , _pc           :: Integer
-  , _funcRegistry :: FuncRegistry
+  , _memory       :: !(M.Map Integer Size) -- Every memory cell is 32 bytes. If we allocate any of them, we do it with a size
+  , _pc           :: !Integer
+  , _funcRegistry :: !FuncRegistry
   , _program      :: Program
   }
 

@@ -12,7 +12,7 @@ import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           System.IO (hClose)
-import           System.Process
+import           System.Process hiding (env)
 import           Text.Parsec (ParseError)
 import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
@@ -21,9 +21,9 @@ import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
                                     Sig (..), initProgram, runEvm)
 import           Ivy.EvmAPI.Instruction (generateByteCode)
+import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import qualified Ivy.Parser as P
 import qualified Ivy.Syntax as S
-import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import           Ivy.Utils.EvmAsm (asm)
 ------------------------------------------------------
 
@@ -58,11 +58,21 @@ parse code =
     Left (Parsing -> err) -> throwError err
     Right result          -> return result
 
-execByteCode :: MonadIO m => T.Text -> m T.Text
-execByteCode byteCode = do
-  (_, _, Just hout, _) <- liftIO $ createProcess
-    (proc "evm" ["--debug", "--code", T.unpack byteCode, "run", "2> out.log"]) { std_err = CreatePipe }
+execByteCode :: MonadIO m => Environment -> T.Text -> m T.Text
+execByteCode env byteCode = do
+  hout <- get_hout
+
   liftIO $ T.hGetContents hout <* hClose hout
+    where
+      get_hout = case env of
+        Testing -> do
+          (_, _, Just hout, _) <- liftIO $ createProcess
+            (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]) { std_err = CreatePipe }
+          pure hout
+        Console -> do
+          (_, Just hout, _, _) <- liftIO $ createProcess
+            (proc "evm" ["--debug", "--code", T.unpack byteCode, "run"]) { std_out = CreatePipe }
+          pure hout
 
 -- Given the address of the deployer, prepares the environment
 initEnv :: Integer -> Env
@@ -71,13 +81,17 @@ initEnv _userAddr = (Sig "main" [] S.TInt, [M.empty])
 initCodegenState :: CodegenState
 initCodegenState =
   CodegenState
-    { _memPointers      = initMemPointers
+    { _memPointer = 0
     , _memory           = initMemory
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
     , _funcRegistry     = M.empty
     , _program          = initProgram
     }
+
+data Environment =
+    Console
+  | Testing
 
 main :: IO ()
 main = do
@@ -97,10 +111,10 @@ main = do
         ByteCode ->
           parse code >>= codegen initCodegenState >>= liftIO . print
         Run ->
-          void $ parse code >>= codegen initCodegenState >>= execByteCode
+          void $ parse code >>= codegen initCodegenState >>= execByteCode Console
         Asm -> do
           let byteCode = asm (T.lines code)
-          void $ liftIO (execByteCode byteCode)
+          void $ liftIO (execByteCode Console byteCode)
         Disasm -> do
           parse code >>= codegen initCodegenState >>= liftIO . T.writeFile "yis"
           (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
