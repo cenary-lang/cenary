@@ -28,7 +28,7 @@ assertions =
     , "Corrupted.ivy"
     )
   , ( "Should be able to generate code for if statements"
-    , ShouldParse (ShouldCodegen (T.isInfixOf "yigit"))
+    , ShouldParse (ShouldCodegen (containsChars ['y', 'i', 'g', 'i', 't']))
     , "FunCall.ivy"
     )
     -- Computes 15th element of fibonacci series. 0x0262 = 610d
@@ -41,6 +41,9 @@ assertions =
     , "Fibonacci.ivy"
     )
   ]
+
+containsChars :: [Char] -> T.Text -> Bool
+containsChars cx t = all (\c -> T.isInfixOf (T.singleton c) t) cx
 
 main :: IO ()
 main = hspec $ do
@@ -59,7 +62,7 @@ assert (description, assertion, sourceFile) =
       ShouldParse (ShouldCodegen outputAssertion) -> do
         it description $ do
           ast <- shouldParse sourceFile
-          output <- Ivy.execByteCode =<< shouldCodegen ast
+          output <- Ivy.execByteCode Ivy.Testing =<< shouldCodegen ast
           outputAssertion output `shouldBe` True
           pure ()
 
