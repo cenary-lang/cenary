@@ -4,7 +4,6 @@
 
 module Ivy.Syntax where
 
-import Data.Monoid ((<>))
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -25,7 +24,6 @@ data Op =
   deriving (Eq, Show)
 
 type Length = Integer
-type Index = Integer
 
 data PrimType =
     TInt
@@ -33,14 +31,7 @@ data PrimType =
   | TBool
   | TArray Length PrimType
   | TFun PrimType
-  deriving Eq
-
-instance Show PrimType where
-  show TInt          = "uint256" -- We just send integers in transactions for now.
-  show TChar         = "char"
-  show TBool         = "boolean"
-  show (TArray _ ty) = show ty ++ " array"
-  show (TFun _ty)    = "function"
+  deriving (Show, Eq)
 
 data Stmt =
     SVarDecl PrimType Name
@@ -55,15 +46,12 @@ data Stmt =
   | SExpr Expr
   deriving (Show, Eq)
 
-data FunSig = FunSig String [(PrimType, Name)]
-  deriving (Eq)
+data FunModifier =
+  PureModifier
+  deriving (Show, Eq)
 
-instance Show FunSig where
-  show (FunSig name args) =
-    let show_args [] = ""
-        show_args [(ty, name)] = show ty
-        show_args ((ty, name):xs) = show ty <> "," <> show_args xs
-     in name <> "(" <> show_args args <> ")"
+data FunSig = FunSig [FunModifier] String [(PrimType, Name)]
+  deriving (Show, Eq)
 
 data FunStmt = FunStmt FunSig Block PrimType
   deriving (Show, Eq)

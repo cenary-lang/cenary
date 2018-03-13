@@ -9,7 +9,7 @@ module Ivy.EvmAPI.Instruction where
 --------------------------------------------------------------------------------
 import           Control.Lens hiding (op)
 import           Control.Monad.Except
-import           Control.Monad.State (MonadState, gets)
+import           Control.Monad.State (MonadState)
 import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT)
 import           Text.Printf
@@ -75,11 +75,6 @@ generateByteCode (Program instructions) =
                       PUSH4 val -> printf "%08x" val
                       PUSH1 val -> printf "%02x" val
                       _          -> ""
-
--- interceptWithLogs :: Program -> Program
--- interceptWithLogs = addInstr LOG0
---                   . addInstr (PUSH32 0x0)
---                   . addInstr (PUSH32 0x100)
 
 instance OpcodeM Evm where
   op instr = do

@@ -21,16 +21,17 @@ import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
 import           Data.Foldable (traverse_)
+import           Data.Functor (($>))
+import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import Data.Functor (($>))
 import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
+import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.Instruction
 import           Ivy.Syntax
-import Ivy.Crypto.Keccak (keccak256)
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -303,9 +304,8 @@ type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError C
 data TOperand a = TOperand Addr
 
 registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
-registerFunction name args = do
+registerFunction _name args = do
   foldM_ allocArg 0 args
-  -- funcRegistry %= M.insert name allocatedArgs
     where
       allocArg :: Integer -> (PrimType, Name) -> m Integer
       allocArg paramOrder (ty, argName) = do
@@ -319,9 +319,23 @@ resetMemory = do
   memory .= initMemory
   memPointer .= 0
 
+sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m (Maybe b)
+sigToKeccak256 (FunSig _ name args) = do
+  argRep <- show_args
+  pure $ keccak256 (name <> "(" <> argRep <> ")")
+    where
+      show_args :: m String
+      show_args = intercalate "," <$> (mapM show_arg args)
+
+      show_arg :: (PrimType, Name) -> m String
+      show_arg (ty, _) =
+        case ty of
+          TInt -> pure "uint256"
+          _ -> throwError $ SupportError $ "Types other than TInt are not supported as function arguments yet."
+
 codegenFunDef :: CodegenM m => FunStmt -> m ()
-codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
-  case keccak256 sig of
+codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
+  sigToKeccak256 sig >>= \case
     Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
     Just fnNameHash -> do
       resetMemory
@@ -358,8 +372,8 @@ codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
           go :: [Stmt] -> m Operand
           go []             = throwError NoReturnStatement
           go [SReturn expr] = do
-            operand@(Operand ty addr) <- codegenExpr expr
-            op (PUSH32 (addr + 0x20))
+            operand@(Operand _ty addr) <- codegenExpr expr
+            op (PUSH32 (addr + 0x20)) -- TODO: ASSUMPTION: uint32
             op (PUSH32 addr)
             op RETURN
             return operand
@@ -374,7 +388,7 @@ codegenFunDef (FunStmt sig@(FunSig name args) block retTyAnnot) = do
         *> op CALLDATALOAD
         *> op (PUSH32 memOffset)
         *> op MSTORE
-        $> (paramOffset + 0x20, memOffset + 0x20)
+        $> (paramOffset + 0x20, memOffset + 0x20) -- TODO: ASSUMPTION: uint32
 
 takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
 takeArgsToContext funcName registryArgs callerArgs = do

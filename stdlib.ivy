@@ -1,4 +1,4 @@
-int addvals(int x, int y) {
+pure int addvals(int x, int y) {
   return x + y;
 }
 

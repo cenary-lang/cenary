@@ -36,19 +36,6 @@ instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Compile Error: " <> show err
 
--- codegenFundef :: [S.FunStmt] -> ExceptT Error (StateT CodegenState Identity ())
--- codegenFundef stmts = do
---   unless main_exists $ throwError $ Codegen $ MainFunctionDoesNotExist
---   action
---   -- case execStateT (runEvm action) initState of
---   --   Left (Codegen -> err) -> throwError err
---   --   Right state           -> return state
---   where
---     action = do
---       traverse_ C.codegenFunDef stmts
---       C.codegenFunCall "main" []
---     main_exists = any (\(S.FunStmt name _ _ _) -> name == "main") stmts
-
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
 codegen initState functions =
   fmap (T.pack . generateByteCode . _program)
@@ -115,7 +102,7 @@ main = do
           ast <- parse code
           liftIO $ pPrint ast
         ByteCode ->
-          parse code >>= codegen initCodegenState >>= liftIO . print
+          parse code >>= codegen initCodegenState >>= liftIO . T.putStrLn
         Run ->
           void $ parse code >>= codegen initCodegenState >>= execByteCode Console
         Asm -> do
@@ -128,3 +115,10 @@ main = do
             T.putStrLn =<< T.hGetContents hout
             callProcess "rm" ["yis"]
             hClose hout
+        Deploy -> do
+          bytecode <- parse code >>= codegen initCodegenState
+          liftIO $ callProcess "cp" ["deployment/deployment.js", "deployment/deployment.backup.js"]
+          liftIO $ callProcess "sed" ["-i", "''", "s/@bin@/" <> T.unpack bytecode <> "/", "deployment/deployment.js"]
+        RewindDeploy -> do
+          liftIO $ callProcess "rm" ["deployment/deployment.js"]
+          liftIO $ callProcess "mv" ["deployment/deployment.backup.js", "deployment/deployment.js"]
