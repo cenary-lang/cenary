@@ -6,7 +6,7 @@ in import ./vmTest.nix {
       startAll;
       $master->succeed("echo wow");
     '';
-    name = "wow";
+    name = "ivy-deployment-tests";
     nodes = {
       master = { config, nodes, ... }: {
         virtualisation.vlans = [1]; 
