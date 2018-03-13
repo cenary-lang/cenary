@@ -16,6 +16,7 @@ import           System.IO (hClose)
 import           System.Process hiding (env)
 import           Text.Parsec (ParseError)
 import           Text.Pretty.Simple (pPrint)
+import System.Exit (exitWith, ExitCode (..))
 ------------------------------------------------------
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
@@ -92,8 +93,8 @@ main = do
   code <- T.readFile inputFile
   result <- runExceptT (go code mode)
   case result of
-    Left err -> T.putStrLn "" >> T.putStrLn (T.pack (show err))
-    Right () -> return ()
+    Left err -> T.putStrLn "" >> T.putStrLn (T.pack (show err)) >> exitWith (ExitFailure 1)
+    Right () -> exitWith ExitSuccess
   where
     go :: T.Text -> Mode -> ExceptT Error IO ()
     go code mode =

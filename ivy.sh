@@ -39,8 +39,13 @@ function rewind-deploy {
 function compute {
   compile true
   deploy
-  node deployment/deployment.js
-  rewind-deploy
+  if ! [[ "$?" = 0 ]]; then
+    echo "[!] Compilation did not succeed."
+    exit 1
+  else
+    node deployment/deployment.js
+    rewind-deploy
+  fi
 }
 
 case $1 in
