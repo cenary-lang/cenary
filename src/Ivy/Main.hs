@@ -118,7 +118,7 @@ main = do
         Deploy -> do
           bytecode <- parse code >>= codegen initCodegenState
           liftIO $ callProcess "cp" ["deployment/deployment.js", "deployment/deployment.backup.js"]
-          liftIO $ callProcess "sed" ["-i", "''", "s/@bin@/" <> T.unpack bytecode <> "/", "deployment/deployment.js"]
+          liftIO $ callProcess "sed" ["-i", "", "s/@bin@/" <> T.unpack bytecode <> "/", "deployment/deployment.js"]
         RewindDeploy -> do
           liftIO $ callProcess "rm" ["deployment/deployment.js"]
           liftIO $ callProcess "mv" ["deployment/deployment.backup.js", "deployment/deployment.js"]
