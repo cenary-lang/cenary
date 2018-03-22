@@ -217,8 +217,13 @@ sIfThenElse = do
   return (SIfThenElse pred tBody eBody)
   <?> "if then else"
 
+funModifier :: Parser FunModifier
+funModifier =
+  reserved "pure" $> PureModifier
+
 sFunDef :: Parser FunStmt
 sFunDef = do
+  modifiers <- many funModifier
   retType <- try tyArray <|> typeAnnot
   whitespace
   name <- identifier
@@ -228,7 +233,7 @@ sFunDef = do
   char' ')'
   whitespace
   body <- curlied block
-  return (FunStmt name args body retType)
+  return (FunStmt (FunSig modifiers name args) body retType)
   <?> "function definition"
 
 eFunCall :: Parser Expr

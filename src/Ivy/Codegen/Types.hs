@@ -38,8 +38,13 @@ data Instruction =
   | JUMPI
   | PC
   | JUMPDEST
+  | CODECOPY
+  | PUSH1 Integer
+  | PUSH4 Integer
   | PUSH32 Integer
   | DUP1
+  | EXP
+  | CALLDATALOAD
   | DUP2
   | SWAP1
   | SWAP2
@@ -70,6 +75,7 @@ data CodegenError =
   | EmptyArrayValue
   | NonInitializedArrayAccess String
   | IllegalArrAccess String PrimType
+  | SupportError String
   | NoReturnStatement
 
 type Addr = Integer
@@ -118,6 +124,7 @@ instance Show CodegenError where
   show (IllegalArrAccess name ty) = "You wanted to access to variable " <> name <> " as if it's an array, but it's type is " <> show ty
   show NoReturnStatement = "Functions should have return statement as their last statement"
   show MainFunctionDoesNotExist = "Main function does not exist"
+  show (SupportError description) = "Not supported yet: " <> description
 
 data Size =
     Size_1
@@ -170,6 +177,7 @@ data CodegenState = CodegenState
   , _pc           :: !Integer
   , _funcRegistry :: !FuncRegistry
   , _program      :: Program
+  , _funcOffset   :: !Integer
   }
 
 makeLenses ''CodegenState

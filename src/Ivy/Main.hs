@@ -7,6 +7,7 @@ module Ivy.Main where
 import           Control.Error.Util (hoistEither)
 import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
+import           Data.Bifunctor (bimap)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -15,6 +16,7 @@ import           System.IO (hClose)
 import           System.Process hiding (env)
 import           Text.Parsec (ParseError)
 import           Text.Pretty.Simple (pPrint)
+import System.Exit (exitWith, ExitCode (..))
 ------------------------------------------------------
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
@@ -35,20 +37,12 @@ instance Show Error where
   show (Parsing err) = "Parsing Error: " <> show err
   show (Codegen err) = "Compile Error: " <> show err
 
-codegenFundef :: CodegenState -> [S.FunStmt] -> Either Error CodegenState
-codegenFundef initState stmts = do
-  unless main_exists $ throwError $ Codegen $ MainFunctionDoesNotExist
-  case execStateT (runEvm action) initState of
-    Left (Codegen -> err) -> throwError err
-    Right state           -> return state
-  where
-    action = do
-      mapM_ C.codegenFunDef stmts
-      C.codegenFunCall "main" []
-    main_exists = any (\(S.FunStmt name _ _ _) -> name == "main") stmts
-
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
-codegen state = fmap (T.pack . generateByteCode . _program) . hoistEither . codegenFundef state
+codegen initState functions =
+  fmap (T.pack . generateByteCode . _program)
+    $ hoistEither
+    $ bimap Codegen id
+    $ execStateT (runEvm (C.codegenPhases functions)) initState
 
 type AST = [S.FunStmt]
 
@@ -61,7 +55,6 @@ parse code =
 execByteCode :: MonadIO m => Environment -> T.Text -> m T.Text
 execByteCode env byteCode = do
   hout <- get_hout
-
   liftIO $ T.hGetContents hout <* hClose hout
     where
       get_hout = case env of
@@ -87,6 +80,7 @@ initCodegenState =
     , _pc               = 0
     , _funcRegistry     = M.empty
     , _program          = initProgram
+    , _funcOffset       = 0
     }
 
 data Environment =
@@ -99,8 +93,8 @@ main = do
   code <- T.readFile inputFile
   result <- runExceptT (go code mode)
   case result of
-    Left err -> T.putStrLn "" >> T.putStrLn (T.pack (show err))
-    Right () -> return ()
+    Left err -> T.putStrLn "" >> T.putStrLn (T.pack (show err)) >> exitWith (ExitFailure 1)
+    Right () -> exitWith ExitSuccess
   where
     go :: T.Text -> Mode -> ExceptT Error IO ()
     go code mode =
@@ -109,7 +103,7 @@ main = do
           ast <- parse code
           liftIO $ pPrint ast
         ByteCode ->
-          parse code >>= codegen initCodegenState >>= liftIO . print
+          parse code >>= codegen initCodegenState >>= liftIO . T.putStrLn
         Run ->
           void $ parse code >>= codegen initCodegenState >>= execByteCode Console
         Asm -> do
@@ -122,3 +116,10 @@ main = do
             T.putStrLn =<< T.hGetContents hout
             callProcess "rm" ["yis"]
             hClose hout
+        Deploy -> do
+          bytecode <- parse code >>= codegen initCodegenState
+          liftIO $ callProcess "cp" ["deployment/deployment.js", "deployment/deployment.backup.js"]
+          liftIO $ callProcess "sed" ["-i", "", "s/@bin@/" <> T.unpack bytecode <> "/", "deployment/deployment.js"]
+        RewindDeploy -> do
+          liftIO $ callProcess "rm" ["deployment/deployment.js"]
+          liftIO $ callProcess "mv" ["deployment/deployment.backup.js", "deployment/deployment.js"]

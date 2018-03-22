@@ -25,6 +25,7 @@ library
   build-depends:
     base >=4.9 && <4.10,
     containers,
+    cryptonite,
     either,
     errors,
     lens,
@@ -36,7 +37,8 @@ library
     pretty-simple,
     process,
     template-haskell,
-    text
+    text,
+    bytestring
   exposed-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
@@ -47,8 +49,9 @@ library
     Ivy.Parser,
     Ivy.Syntax,
     Ivy.Options,
-    Ivy.Utils.EvmAsm
-    Ivy.Main
+    Ivy.Utils.EvmAsm,
+    Ivy.Main,
+    Ivy.Crypto.Keccak
 
 test-suite tests
     type:             exitcode-stdio-1.0

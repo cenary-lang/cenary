@@ -24,7 +24,6 @@ data Op =
   deriving (Eq, Show)
 
 type Length = Integer
-type Index = Integer
 
 data PrimType =
     TInt
@@ -32,14 +31,7 @@ data PrimType =
   | TBool
   | TArray Length PrimType
   | TFun PrimType
-  deriving Eq
-
-instance Show PrimType where
-  show TInt          = "integer"
-  show TChar         = "char"
-  show TBool         = "boolean"
-  show (TArray _ ty) = show ty ++ " array"
-  show (TFun _ty)    = "function"
+  deriving (Show, Eq)
 
 data Stmt =
     SVarDecl PrimType Name
@@ -54,7 +46,14 @@ data Stmt =
   | SExpr Expr
   deriving (Show, Eq)
 
-data FunStmt = FunStmt String [(PrimType, Name)] Block PrimType
+data FunModifier =
+  PureModifier
+  deriving (Show, Eq)
+
+data FunSig = FunSig [FunModifier] String [(PrimType, Name)]
+  deriving (Show, Eq)
+
+data FunStmt = FunStmt FunSig Block PrimType
   deriving (Show, Eq)
 
 data Expr =

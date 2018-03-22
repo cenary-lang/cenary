@@ -1,9 +1,9 @@
 #!/bin/bash
 
 function compile {
-  echo "[.] Compiling..."
+  if ! [[ "$1" = true ]]; then echo "[.] Compiling..."; fi
   stack build
-  echo "[.] Compilation complete."
+  if ! [[ "$1" = true ]]; then echo "[.] Compilation complete."; fi
 }
 
 EXECUTABLE=./.stack-work/install/x86_64-osx/lts-9.5/8.0.2/bin/ivy
@@ -28,6 +28,26 @@ function asm {
   $EXECUTABLE -m asm -i in.evm
 }
 
+function deploy {
+  $EXECUTABLE -m deploy -i stdlib.ivy
+}
+
+function rewind-deploy {
+  $EXECUTABLE -m rewind-deploy -i stdlib.ivy
+}
+
+function compute {
+  compile true
+  deploy
+  if ! [[ "$?" = 0 ]]; then
+    echo "[!] Compilation did not succeed."
+    exit 1
+  else
+    node deployment/deployment.js
+    rewind-deploy
+  fi
+}
+
 case $1 in
 clear)
   clear
@@ -49,6 +69,15 @@ asm)
   ;;
 disasm)
   disasm
+  ;;
+deploy)
+  deploy
+  ;;
+rewind-deploy)
+  rewind-deploy
+  ;;
+compute)
+  compute
   ;;
 *)
   compile
