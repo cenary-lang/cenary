@@ -90,8 +90,17 @@ web3.eth.getAccounts().then(addresses => {
   var Contract = new web3.eth.Contract(abi, {data: bin, from: addresses[0], gasPrice: 20000000000, gas: 1000000 });
   var deployment = Contract.deploy().send();
   deployment.then(newContract => {
-    newContract.methods.identity(3).call().then(console.log);
-    newContract.methods.addvals(15, 25).call().then(console.log);
-    newContract.methods.fib(15).call().then(console.log);
+    newContract.methods.identity(3).call().then(result => {
+      console.log("\nidentity(3):");
+      console.log(result);
+    });
+    newContract.methods.addvals(15, 25).call().then(result => {
+      console.log("\naddvals(15, 25):");
+      console.log(result);
+    });
+    newContract.methods.fib(15).call().then(result => {
+      console.log("\nfib(15):");
+      console.log(result);
+    });
   });
 });
