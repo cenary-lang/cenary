@@ -38,7 +38,8 @@ library
     process,
     template-haskell,
     text,
-    bytestring
+    bytestring,
+    indexed
   exposed-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
