@@ -14,7 +14,7 @@ import qualified Data.Map as M
 import           Data.Monoid
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Types
-import           Ivy.EvmAPI.Instruction
+import           Ivy.EvmAPI.API
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
@@ -47,20 +47,20 @@ instance MemoryM Evm where
   storeAddressed valAddr destAddr = do
     -- Initial state
     load valAddr
-    op (PUSH32 destAddr)
+    push32 destAddr
     store
 
   load addr = do
-    op (PUSH32 addr)
-    op MLOAD
+    push32 addr
+    mload
 
   storeVal val destAddr = do
-    op (PUSH32 val)
-    op (PUSH32 destAddr)
+    push32 val
+    push32 destAddr
     store
 
   store =
-    op MSTORE
+    mstore
 
   alloc size = do
     pointer <- use memPointer
@@ -74,7 +74,7 @@ instance MemoryM Evm where
     pure (addr * 0x20)
 
   push val =
-    op (PUSH32 val) -- OPTIMIZE: different PUSH variants can be used for this task
+    push32 val -- OPTIMIZE: different PUSH variants can be used for this task
 
   allocBulk len size = do
     pointer <- use memPointer

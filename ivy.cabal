@@ -43,6 +43,7 @@ library
     Ivy.Codegen,
     Ivy.Codegen.Types,
     Ivy.Codegen.Memory,
+    Ivy.EvmAPI.API,
     Ivy.EvmAPI.Instruction,
     Ivy.Lexer,
     Ivy.Lexer.Language,
