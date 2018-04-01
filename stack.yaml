@@ -4,4 +4,4 @@ packages:
 - .
 extra-deps:
 - parsec-numbers-0.1.0
-resolver: lts-9.5
+resolver: lts-11.2

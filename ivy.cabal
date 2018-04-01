@@ -23,7 +23,7 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall
   build-depends:
-    base >=4.9 && <4.10,
+    base >=4.9 && <4.11,
     containers,
     cryptonite,
     either,
@@ -71,7 +71,7 @@ test-suite tests
 executable ivy
     build-depends:
       ivy,
-      base >=4.9 && <4.10,
+      base >=4.9 && <4.11,
       containers,
       either,
       errors,
