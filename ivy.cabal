@@ -23,7 +23,7 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall
   build-depends:
-    base >=4.9 && <4.10,
+    base >=4.9 && <4.11,
     containers,
     cryptonite,
     either,
@@ -38,11 +38,13 @@ library
     process,
     template-haskell,
     text,
-    bytestring
+    bytestring,
+    indexed
   exposed-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
     Ivy.Codegen.Memory,
+    Ivy.EvmAPI.API,
     Ivy.EvmAPI.Instruction,
     Ivy.Lexer,
     Ivy.Lexer.Language,
@@ -71,7 +73,7 @@ test-suite tests
 executable ivy
     build-depends:
       ivy,
-      base >=4.9 && <4.10,
+      base >=4.9 && <4.11,
       containers,
       either,
       errors,

@@ -22,7 +22,7 @@ import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
                                     Sig (..), initProgram, runEvm)
-import           Ivy.EvmAPI.Instruction (generateByteCode)
+import           Ivy.EvmAPI.API (generateByteCode)
 import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import qualified Ivy.Parser as P
 import qualified Ivy.Syntax as S

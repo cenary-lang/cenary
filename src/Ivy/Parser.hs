@@ -90,7 +90,6 @@ expr = buildExpressionParser binops expr'
 stmt :: Parser Stmt
 stmt =
   try declAndAssignment
-   <|> try times
    <|> try while
    <|> try varDecl
    <|> try arrAssignment
@@ -150,17 +149,6 @@ while = do
   pred <- expr
   body <- curlied block
   return (SWhile pred body)
-
-times :: Parser Stmt
-times = do
-  until <- integer
-  char' '.'
-  reserved "times"
-  reserved "do"
-  body <- block
-  reserved "endtimes"
-  return (STimes until body)
-  <?> "times iteration"
 
 assignment :: Parser Stmt
 assignment = do

@@ -25,12 +25,12 @@ import           Data.Functor (($>))
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until)
+import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until, div, exp, mod)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
-import           Ivy.EvmAPI.Instruction
+import           Ivy.EvmAPI.API
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
@@ -83,11 +83,11 @@ instance TcM Evm where
   checkTyEq name tyL tyR =
     unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
-binOp :: (OpcodeM m, MemoryM m) => PrimType -> Instruction -> Integer -> Integer -> m Operand
-binOp t instr left right = do
+binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> Integer -> Integer -> m Operand
+binOp t op left right = do
   load right
   load left
-  op instr
+  op
   addr <- alloc (sizeof t)
   push addr
   store
@@ -129,48 +129,22 @@ declVar ty name =
       updateCtx (M.insert name (ty, VarAddr Nothing))
 
 codegenStmt :: CodegenM m => Stmt -> m ()
-codegenStmt (STimes until block) = do
-  -- Assign target value
-  op (PUSH32 until)
-  op JUMPDEST
-
-  -- Prepare true value of current PC
-  op PC
-  op (PUSH32 0x01)
-  op SWAP1
-  op SUB
-
-  -- Decrease target value
-  op SWAP1
-  op (PUSH32 0x01)
-  op SWAP1
-  op SUB
-
-  -- Code body
-  executeBlock block
-
-  -- Jump to destination back if target value is nonzero
-  op DUP1
-  op SWAP2
-  op JUMPI
-  op POP
-
 codegenStmt (SWhile pred block) = do
   Operand predTy predAddr <- codegenExpr pred
   checkTyEq "index_of_while_pred" TBool predTy
 
   load predAddr
-  op ISZERO -- Reversing this bit because we jump to outside of while initally if predicate is false
+  iszero -- Reversing this bit because we jump to outside of while initally if predicate is false
 
   offset <- use funcOffset
-  rec op (PUSH32 (whileOut - offset))
-      op JUMPI
+  rec push32 (whileOut - offset)
+      jumpi
 
       -- Loop start
       loopStart <- jumpdest
 
       -- Prepare true value of current PC
-      op (PUSH32 (loopStart - offset))
+      push32 (loopStart - offset)
 
       -- Code body
       executeBlock block
@@ -179,11 +153,10 @@ codegenStmt (SWhile pred block) = do
       Operand predTy' predAddr' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
       load predAddr'
-      -- op SWAP1
 
       -- Jump to destination back if target value is nonzero
-      op SWAP1
-      op JUMPI
+      swap1
+      jumpi
       whileOut <- jumpdest
   pure ()
 
@@ -204,10 +177,10 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       load addr
 
       load iAddr
-      op (PUSH32 (sizeInt (sizeof aTy)))
-      op MUL
-      op (PUSH32 oldAddr)
-      op ADD
+      push32 (sizeInt (sizeof aTy))
+      mul
+      push32 oldAddr
+      add
       store
     Def other _ -> throwError $ InternalError $ "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation: " <> show other
 
@@ -223,13 +196,11 @@ codegenStmt (SIf ePred bodyBlock) = do
   checkTyEq "if_expr" tyPred TBool
 
   load addrPred
-  op ISZERO -- Negate for jumping condition
+  iszero -- Negate for jumping condition
 
   -- offset <- estimateOffset bodyBlock
-  rec op (PUSH32 ifOut) -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.)
-      -- op PC
-      -- op ADD
-      op JUMPI
+  rec push32 ifOut -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.)
+      jumpi
 
       void $ executeBlock bodyBlock
       ifOut <- jumpdest
@@ -240,22 +211,18 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   checkTyEq "if_else_expr" tyPred TBool
 
   load addrPred
-  op ISZERO -- Negate for jumping condition
+  iszero -- Negate for jumping condition
   -- trueOffset <- estimateOffset trueBlock
   rec -- let trueJumpDest = pcCosts [PC, ADD, JUMPI, PUSH32 0, PC, ADD, JUMP] + trueOffset
-      op (PUSH32 trueDest)
-      -- op PC
-      -- op ADD
-      op JUMPI
+      push32 trueDest
+      jumpi
 
       executeBlock trueBlock
       -- falseOffset <- estimateOffset falseBlock
 
       -- let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
-      op (PUSH32 falseDest)
-      -- op PC
-      -- op ADD
-      op JUMP
+      push32 falseDest
+      jump
 
       trueDest <- jumpdest
       executeBlock falseBlock
@@ -266,36 +233,6 @@ codegenStmt (SReturn retExpr) =
   void (codegenExpr retExpr)
 
 codegenStmt (SExpr expr) = void (codegenExpr expr)
-
--- estimateOffsetExpr :: (MonadError CodegenError m, MonadState CodegenState m) => Expr -> m Integer
--- estimateOffsetExpr expr =
---   get >>= eitherToError . go
---     where
---       go :: CodegenState -> Either CodegenError Integer
---       go state =
---         let oldPc = _pc state
---             result = execStateT (runEvm (codegenExpr expr)) state
---         in
---           case result of
---             Left err -> Left err
---             Right newState -> Right (_pc newState - oldPc)
-
--- estimateOffset :: (MonadError CodegenError m, MonadState CodegenState m) => Block -> m Integer
--- estimateOffset block =
---   get >>= eitherToError . go block
---     where
---       go :: Block -> CodegenState -> Either CodegenError Integer
---       go (Block []) _ = Right 0
---       go (Block (stmt:xs)) state =
---         let oldPc = _pc state
---             result = execStateT (runEvm (codegenStmt stmt)) state
---         in
---           case result of
---             Left err -> Left err
---             Right newState -> do
---               let newPc = _pc newState
---               let diff = newPc - oldPc
---               (+ diff) <$> go (Block xs) newState
 
 -- | This type alias will be used for top-level codegen, since
 -- at top level we use all contexts
@@ -343,17 +280,17 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
       rec
           -- Function's case statement. If name does not match, we don't enter to this function.
           offset <- use funcOffset
-          op (PUSH4 fnNameHash)
-          op (PUSH1 0xe0)
-          op (PUSH1 0x02)
-          op EXP
-          op (PUSH1 0x00)
-          op CALLDATALOAD
-          op DIV
-          op EQ
-          op ISZERO
-          op (PUSH32 (functionOut - offset))
-          op JUMPI
+          push4 fnNameHash
+          push1 0xe0
+          push1 0x02
+          exp
+          push1 0x00
+          calldataload
+          div
+          eq
+          iszero
+          push32 (functionOut - offset)
+          jumpi
 
           -- Store parameters
           storeParameters args
@@ -373,9 +310,9 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
           go []             = throwError NoReturnStatement
           go [SReturn expr] = do
             operand@(Operand _ty addr) <- codegenExpr expr
-            op (PUSH32 (addr + 0x20)) -- TODO: ASSUMPTION: uint32
-            op (PUSH32 addr)
-            op RETURN
+            push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
+            push32 addr
+            op_return
             return operand
           go (stmt:xs)      = codegenStmt stmt >> go xs
 
@@ -384,10 +321,10 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
 
       storeParamsFold :: forall m. CodegenM m => (Integer, Integer) -> (PrimType, Name) -> m (Integer, Integer)
       storeParamsFold (paramOffset, memOffset) (_ty, _name) =
-           op (PUSH32 paramOffset)
-        *> op CALLDATALOAD
-        *> op (PUSH32 memOffset)
-        *> op MSTORE
+           push32 paramOffset
+        *> calldataload
+        *> push32 memOffset
+        *> mstore
         $> (paramOffset + 0x20, memOffset + 0x20) -- TODO: ASSUMPTION: uint32
 
 takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
@@ -412,12 +349,11 @@ codegenFunCall name args = do
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
     FunDef retTy funAddr retAddr -> do
       -- Preparing checkpoint
-      -- op (PUSH32 (pcCosts [PUSH32 0, JUMP, PUSH32 0, JUMP, JUMPDEST]))
-      rec op (PUSH32 funcDest)
+      rec push32 funcDest
 
           -- Jumping to function
-          op (PUSH32 funAddr)
-          op JUMP
+          push32 funAddr
+          jump
           funcDest <- jumpdest
 
       return (Operand retTy retAddr)
@@ -460,18 +396,19 @@ codegenExpr (EBool val) = do
 codegenExpr (EBinop binop expr1 expr2) = do
   Operand ty1 left <- codegenExpr expr1
   Operand ty2 right <- codegenExpr expr2
-  case (ty1, ty2) of
-    (TInt, TInt) ->
+  operation <- case (ty1, ty2) of
+    (TInt, TInt) -> pure $
       case binop of
-        OpAdd -> binOp TInt ADD left right
-        OpMul -> binOp TInt MUL left right
-        OpSub -> binOp TInt SUB left right
-        OpDiv -> binOp TInt DIV left right
-        OpMod -> binOp TInt MOD left right
-        OpGt  -> binOp TBool GT left right
-        OpLt  -> binOp TBool LT left right
-        OpEq  -> binOp TBool EQ left right
+        OpAdd -> binOp TInt add
+        OpMul -> binOp TInt mul
+        OpSub -> binOp TInt sub
+        OpDiv -> binOp TInt div
+        OpMod -> binOp TInt mod
+        OpGt  -> binOp TBool gt
+        OpLt  -> binOp TBool lt
+        OpEq  -> binOp TBool eq
     _ -> throwError $ WrongOperandTypes ty1 ty2
+  operation left right
 
 codegenExpr (EArray len elemExprs) = do
   elems <- mapM codegenExpr elemExprs
@@ -502,14 +439,14 @@ codegenPhases functions = do
 
 initPhase :: Integer -> CodegenM m => m ()
 initPhase functionCosts = do
-  rec op (PUSH32 functionCosts)
-      op DUP1
-      op (PUSH32 initCost)
-      op (PUSH32 0x00)
-      op CODECOPY
-      op (PUSH32 0x00)
-      op RETURN
-      op STOP
+  rec push32 functionCosts
+      dup1
+      push32 initCost
+      push32 0x00
+      codecopy
+      push32 0x00
+      op_return
+      stop
       initCost <- use pc
   pure ()
 

@@ -36,7 +36,6 @@ data Instruction =
   | MSTORE8
   | JUMP
   | JUMPI
-  | PC
   | JUMPDEST
   | CODECOPY
   | PUSH1 Integer
