@@ -39,7 +39,8 @@ library
     template-haskell,
     text,
     bytestring,
-    indexed
+    indexed,
+    indexed-extras
   exposed-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
@@ -86,6 +87,8 @@ executable ivy
       pretty-simple,
       process,
       template-haskell,
-      text
+      text,
+      indexed,
+      indexed-extras
     main-is: src/Main.hs
     default-language: Haskell2010

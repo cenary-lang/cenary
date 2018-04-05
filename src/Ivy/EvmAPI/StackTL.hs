@@ -7,113 +7,120 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Ivy.EvmAPI.StackTL where
 
 import GHC.TypeLits
 import Control.Monad.Indexed
 import Prelude hiding ((>>))
+import Data.Kind (Constraint)
+import Control.Monad.Indexed.State (IxStateT (..))
+import Control.Monad.Indexed.Trans (ilift)
 
-data StackElem = Jumpdest
+data Stack a = Stack [a]
 
-data Stack (name :: Symbol) (elems :: [StackElem]) = Stack
+type family Empty :: Stack k where
+  Empty = 'Stack '[]
 
-type family Push (elem :: *) (s :: *) :: * where
-  e `Push` (Stack name xs) = Stack name ((TyToElem e) ': xs)
+type family Push (stack :: Stack k) (a :: k) :: Stack k where
+  Push ('Stack xs) val = 'Stack (val ': xs)
 
-type family Pop s :: (StackElem, *) where
-  Pop (Stack name (x ': xs)) = '(x, Stack name xs)
-  Pop (Stack name '[]) =
+type family Pop (stack :: Stack k) :: (k, Stack k) where
+  Pop ('Stack '[]) = 
     TypeError
       ( 'Text "You cannot pop from an empty stack!"
-   ':$$: 'Text "While trying to pop from the stack named " ':<>: 'ShowType name
+   ':$$: 'Text "While trying to pop from the stack."
       )
 
-push :: (newStack ~ Push ty givenStack) => givenStack -> ty -> m newStack
-push _ _ = undefined
+  Pop ('Stack (x ': xs)) = '(x, 'Stack xs)
 
-type family ElemToTy (s :: StackElem) :: * where
-  ElemToTy 'Jumpdest = Int
+data Proxy k = Proxy
 
-type family TyToElem (s :: *) :: StackElem where
-  TyToElem Int = 'Jumpdest
-
-pop :: (Monad m, '(elem, newStack) ~ Pop givenStack) => givenStack -> m (ElemToTy elem, newStack)
-pop = undefined
-
-type EmptyStack = Stack "MyStack" '[]
-
-newtype IxState is os a = IxState { runIState :: is -> (os, a) }
-
-instance IxFunctor IxState where
-  imap f (IxState stateF) = IxState $ \is ->
-    let (os, a) = stateF is 
-     in (os, f a)
-
-instance IxPointed IxState where
-  ireturn v = IxState (, v)
-
-instance IxApplicative IxState where
-  iap (IxState stateFf) (IxState stateF) = IxState $ \is ->
-    let (os, f) = stateFf is
-        (os2, a) = stateF os
-     in (os2, f a)
-
-instance IxMonad IxState where
-  ibind f (IxState ija) = IxState $ \i ->
-    let (j, a) = ija i
-        IxState jkb = f a
-     in jkb j
-
-toBC :: StackElem -> String
-toBC Jumpdest = "0x02"
-
-ixpush :: x -> IxState (MyState stack) (MyState (x `Push` stack)) ()
-ixpush _ = IxState $ \(MyState bc) -> (MyState bc, ())
-
-ixpop :: ('(elem, newStack) ~ Pop stack) => IxState (MyState stack) (MyState newStack) ()
-ixpop = IxState $ \(MyState bc) -> (MyState bc, ())
-
-ixop :: Show x => x -> IxState (MyState stack) (MyState stack) ()
-ixop x = IxState $ \(MyState bc) -> (MyState (bc ++ show x), ())
-
-type family Shrink (vals :: [a]) (n :: Nat) :: [a] where
-  Shrink xs 0 = xs
-  Shrink (x ': xs) v = Shrink xs (v - 1)
-
-type family Extend (val :: a) (vals :: [a]) (n :: Nat) :: [a] where
-  Extend _ xs 0 = xs
-  Extend x xs n = Extend x (x ': xs) (n - 1)
-
-type StackModify pop push a = forall name x xs. IxState (MyState (Stack name (Extend x xs pop))) (MyState (Stack name (Extend x xs push))) a
-
-newAdd :: StackModify 2 1 ()
-newAdd = undefined
-
-ixadd :: IxState (MyState (Stack name (x ': y ': xs))) (MyState (Stack name (k ': xs))) ()
-ixadd = undefined
-
-(>>>>) :: IxState i o a -> IxState o j b -> IxState i j b
+(>>>>) :: Monad m => IxStateT m i o a -> IxStateT m o j b -> IxStateT m i j b
 a >>>> b = a >>>= \_ -> b
 infixl 3 >>>>
 
-data MyState stack = MyState
+data StackElem = JumpdestElem
+               | IntElem
+
+data MyState (stack :: Stack StackElem) = MyState
   { _bytecode :: String
+  , _pc :: Int
   }
 
-comp :: IxState (MyState EmptyStack) (MyState EmptyStack) ()
+data Wrap (elem :: StackElem) where
+  JUMPDEST :: Wrap 'JumpdestElem
+  INT :: Wrap 'IntElem
+
+ixconst :: Monad m => IxStateT m (MyState stack0) (MyState stack1) ()
+ixconst = IxStateT $ \(MyState bc pc) -> pure ((), MyState bc pc)
+
+ixpush :: Monad m => forall x. Wrap x -> IxStateT m (MyState stack) (MyState (stack `Push` x)) ()
+ixpush _ = ixconst
+
+ixpop :: (Monad m, '(elem, newStack) ~ Pop stack) => IxStateT m (MyState stack) (MyState newStack) ()
+ixpop = ixconst
+
+type family IsIntElem (desc :: Symbol) (x :: StackElem) :: Constraint where
+  IsIntElem _ 'IntElem = ()
+  IsIntElem desc other = TypeError ('Text "Type of the " ':<>: 'Text desc ':<>: 'Text " should be 'IntElem, but it's " ':<>: 'ShowType other)
+
+type family PopInt (stack :: Stack StackElem) :: Stack StackElem where
+  PopInt ('Stack '[]) =
+    TypeError
+      ( 'Text "You cannot pop from an empty stack!"
+   ':$$: 'Text "While trying to pop from the stack."
+      )
+  PopInt ('Stack ('IntElem ': xs)) = 'Stack xs
+  PopInt ('Stack (x ': xs)) = TypeError ('Text "Stack element's type should be integer, but it's " ':<>: 'ShowType x ':<>: 'Text " instead.")
+
+type family PopMany (n :: Nat) (stack :: Stack k) :: Stack k where
+  PopMany 0 stack = stack
+  PopMany n ('Stack (x ': xs)) = PopMany (n - 1) ('Stack xs)
+
+type family PushMany (val :: k) (n :: Nat) (stack :: Stack k) :: Stack k where
+  PushMany _ 0 stack = stack
+  PushMany val n ('Stack xs) = PushMany val (n - 1) ('Stack (val ': xs))
+
+type StackModify pop push =
+  forall stack m result popped.
+    ( Monad m
+    , popped ~ PopMany pop stack
+    , result ~ PushMany 'IntElem push popped
+    )
+    => IxStateT m (MyState stack) (MyState result) ()
+
+ixadd
+  :: ( Monad m
+     , auxStack ~ PopInt stack
+     , poppedStack ~ PopInt auxStack
+     , resultStack ~ Push poppedStack 'IntElem
+     )
+  => IxStateT m (MyState stack) (MyState resultStack) ()
+ixadd = ixconst
+
+addmy :: StackModify 2 1
+addmy = ixconst
+
+type EmptyStack = 'Stack '[]
+
+comp :: IxStateT IO (MyState EmptyStack) (MyState EmptyStack) ()
 comp = do
-  ixpush (5 :: Integer)
-  ixpush (3 :: Integer)
-  ixop (12 :: Integer) -- Arbitrary runtime computation inside MyState
-  newAdd
+  ixpush INT
+  ixpush INT
+  ixpush INT
+  ilift $ print "wow"
+  addmy
+  ixpop
   ixpop
   where (>>) = (>>>>)
 
--- wow :: IO ()
--- wow = do
---   stack1 <- push (undefined :: EmptyStack) (3 :: Int)
---   stack2 <- push stack1 (4 :: Int)
---   (_, stack3) <- pop (stack2)
---   (_, stack4) <- pop stack3
---   pure ()
+emptyState :: MyState a
+emptyState = MyState "" 0
+
+main :: IO ()
+main = do
+  (out, _) <- (runIxStateT comp) emptyState
+  print out
