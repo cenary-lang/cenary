@@ -25,7 +25,7 @@ import           Data.Functor (($>))
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until, div, exp)
+import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until, div, exp, mod)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -83,11 +83,11 @@ instance TcM Evm where
   checkTyEq name tyL tyR =
     unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
-binOp :: (OpcodeM m, MemoryM m) => PrimType -> Instruction -> Integer -> Integer -> m Operand
-binOp t instr left right = do
+binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> Integer -> Integer -> m Operand
+binOp t op left right = do
   load right
   load left
-  op instr
+  op
   addr <- alloc (sizeof t)
   push addr
   store
@@ -153,7 +153,6 @@ codegenStmt (SWhile pred block) = do
       Operand predTy' predAddr' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
       load predAddr'
-      -- op SWAP1
 
       -- Jump to destination back if target value is nonzero
       swap1
@@ -201,8 +200,6 @@ codegenStmt (SIf ePred bodyBlock) = do
 
   -- offset <- estimateOffset bodyBlock
   rec push32 ifOut -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.)
-      -- op PC
-      -- op ADD
       jumpi
 
       void $ executeBlock bodyBlock
@@ -225,8 +222,6 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
 
       -- let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
       push32 falseDest
-      -- op PC
-      -- op ADD
       jump
 
       trueDest <- jumpdest
@@ -401,18 +396,19 @@ codegenExpr (EBool val) = do
 codegenExpr (EBinop binop expr1 expr2) = do
   Operand ty1 left <- codegenExpr expr1
   Operand ty2 right <- codegenExpr expr2
-  case (ty1, ty2) of
-    (TInt, TInt) ->
+  operation <- case (ty1, ty2) of
+    (TInt, TInt) -> pure $
       case binop of
-        OpAdd -> binOp TInt ADD left right
-        OpMul -> binOp TInt MUL left right
-        OpSub -> binOp TInt SUB left right
-        OpDiv -> binOp TInt DIV left right
-        OpMod -> binOp TInt MOD left right
-        OpGt  -> binOp TBool GT left right
-        OpLt  -> binOp TBool LT left right
-        OpEq  -> binOp TBool EQ left right
+        OpAdd -> binOp TInt add
+        OpMul -> binOp TInt mul
+        OpSub -> binOp TInt sub
+        OpDiv -> binOp TInt div
+        OpMod -> binOp TInt mod
+        OpGt  -> binOp TBool gt
+        OpLt  -> binOp TBool lt
+        OpEq  -> binOp TBool eq
     _ -> throwError $ WrongOperandTypes ty1 ty2
+  operation left right
 
 codegenExpr (EArray len elemExprs) = do
   elems <- mapM codegenExpr elemExprs

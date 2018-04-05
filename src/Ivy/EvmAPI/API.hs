@@ -4,7 +4,6 @@
 
 module Ivy.EvmAPI.API
   ( OpcodeM
-  , op -- Stop exporting this after abstract stack comes in
   , jumpdest
   , stop
   , add
