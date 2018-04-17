@@ -55,7 +55,10 @@ library
     Ivy.Utils.EvmAsm,
     Ivy.Main,
     Ivy.Crypto.Keccak,
-    Evm.Abi
+    Evm.Abi,
+    Ivy.Deployment,
+    Ivy.AbiBridge,
+    Ivy.Error
 
 test-suite tests
     type:             exitcode-stdio-1.0
