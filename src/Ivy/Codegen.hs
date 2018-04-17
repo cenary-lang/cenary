@@ -25,7 +25,8 @@ import           Data.Functor (($>))
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import           Prelude hiding (EQ, GT, LT, log, lookup, pred, until, div, exp, mod)
+import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
+                          until)
 --------------------------------------------------------------------------------
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
@@ -268,7 +269,8 @@ sigToKeccak256 (FunSig _ name args) = do
       show_arg (ty, _) =
         case ty of
           TInt -> pure "uint256"
-          _ -> throwError $ SupportError $ "Types other than TInt are not supported as function arguments yet."
+          TArray _ TChar -> pure "string"
+          _ -> throwError $ SupportError $ "Types than TInt are not supported as function arguments yet."
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
@@ -294,7 +296,7 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
 
           -- Store parameters
           storeParameters args
-            
+
           -- Function body
           funPc <- use pc
           Operand retTy retAddr <- executeFunBlock block

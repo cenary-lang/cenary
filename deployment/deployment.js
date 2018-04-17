@@ -4,85 +4,10 @@
  * testrpc -u 0 -u 1
  */
 
-/**
- * This is the bytecode created by the following Ivy program:
- *
- * int fib(int n) {
- *   int a = 0;
- *   int b = 1;
- *   int sum = 6;
- *   while (n > 1) {
- *     sum = a + b;
- *     a = b;
- *     b = sum;
- *     n = n - 1;
- *   };
- *   return sum;
- * }
- */
-var bin = '@bin@';
 var fs = require('fs');
-var abi =
-  [
-    {
-      "name": "identity",
-      "type": "function",
-      "constant": true,
-      "payable": false,
-      "inputs": [
-        {
-          "name": "n",
-          "type":"uint256"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "",
-          "type":"uint256"
-        }
-      ]
-    },
-    {
-      "name": "addvals",
-      "type": "function",
-      "constant": true,
-      "payable": false,
-      "inputs": [
-        {
-          "name": "m",
-          "type":"uint256"
-        },
-        {
-          "name": "n",
-          "type":"uint256"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "",
-          "type":"uint256"
-        }
-      ]
-    },
-    {
-      "name": "fib",
-      "type": "function",
-      "constant": true,
-      "payable": false,
-      "inputs": [
-        {
-          "name": "n",
-          "type":"uint256"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "",
-          "type":"uint256"
-        }
-      ]
-    }
-  ]
+
+var bin = '@bin@';
+var abi = @abi@
 
 var Web3 = require("web3");
 var web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));

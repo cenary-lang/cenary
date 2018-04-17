@@ -39,13 +39,14 @@ library
     template-haskell,
     text,
     bytestring,
-    indexed
+    indexed,
+    aeson,
+    aeson-casing
   exposed-modules:
     Ivy.Codegen,
     Ivy.Codegen.Types,
     Ivy.Codegen.Memory,
     Ivy.EvmAPI.API,
-    Ivy.EvmAPI.Instruction,
     Ivy.Lexer,
     Ivy.Lexer.Language,
     Ivy.Parser,
@@ -53,7 +54,8 @@ library
     Ivy.Options,
     Ivy.Utils.EvmAsm,
     Ivy.Main,
-    Ivy.Crypto.Keccak
+    Ivy.Crypto.Keccak,
+    Evm.Abi
 
 test-suite tests
     type:             exitcode-stdio-1.0
