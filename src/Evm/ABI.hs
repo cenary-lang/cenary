@@ -16,6 +16,7 @@ module Evm.Abi
 import           Data.Aeson as JSON
 import           Data.Aeson.Casing
 import           Data.Aeson.TH
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 
@@ -55,11 +56,14 @@ data AbiType =
   | AbiTy_char
   | AbiTy_bool
 
+instance Show AbiType where
+  show AbiTy_uint256 = "uint256"
+  show AbiTy_string  = "string"
+  show AbiTy_char    = "bytes1"
+  show AbiTy_bool    = "bool"
+
 instance ToJSON AbiType where
-  toJSON AbiTy_uint256 = JSON.String "uint256"
-  toJSON AbiTy_string  = JSON.String "string"
-  toJSON AbiTy_char  = JSON.String "byte"
-  toJSON AbiTy_bool  = JSON.String "bool"
+  toJSON ty = JSON.String (T.pack (show ty))
 
 deriveToJSON (aesonPrefix camelCase) ''Input
 deriveToJSON (aesonPrefix camelCase) ''Output

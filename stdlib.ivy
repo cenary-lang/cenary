@@ -6,6 +6,10 @@ int identity(int k) {
   return k;
 }
 
+char myid(char l) {
+  return l;
+}
+
 int fib(int n) {
   int a = 0;
   int b = 1;

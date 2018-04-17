@@ -33,6 +33,7 @@ import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.API
 import           Ivy.Syntax
+import Ivy.AbiBridge
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -267,10 +268,9 @@ sigToKeccak256 (FunSig _ name args) = do
 
       show_arg :: (PrimType, Name) -> m String
       show_arg (ty, _) =
-        case ty of
-          TInt -> pure "uint256"
-          TArray _ TChar -> pure "string"
-          _ -> throwError $ SupportError $ "Types than TInt are not supported as function arguments yet."
+        case toAbiTy ty of
+          Left err -> throwError $ InternalError err
+          Right abiTy -> pure $ show abiTy
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do

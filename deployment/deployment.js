@@ -27,5 +27,9 @@ web3.eth.getAccounts().then(addresses => {
       console.log("\nfib(15):");
       console.log(result);
     });
+    newContract.methods.myid('0x42').call().then(result => {
+      console.log("\nmyid('0x42'):");
+      console.log(result);
+    });
   });
 });

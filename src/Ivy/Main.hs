@@ -13,35 +13,28 @@ import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Bifunctor (bimap)
 import qualified Data.Map as M
-import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
 import           System.Exit (ExitCode (..), exitWith)
 import           System.IO (hClose)
 import           System.Process hiding (env)
-import           Text.Parsec (ParseError)
 import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
-import qualified Evm.Abi as Abi
+import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
-import           Ivy.Codegen.Types (CodegenError (..), CodegenState (..), Env,
-                                    Sig (..), initProgram, runEvm)
+import           Ivy.Codegen.Types (CodegenState (..), Env, Sig (..),
+                                    initProgram, runEvm)
+import           Ivy.Deployment (prepareDeployment, rewindDeployment,
+                                 runDeployment)
+import           Ivy.Error
 import           Ivy.EvmAPI.API (generateByteCode)
 import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import qualified Ivy.Parser as P
 import qualified Ivy.Syntax as S
 import           Ivy.Utils.EvmAsm (asm)
 ------------------------------------------------------
-
-data Error =
-    Parsing ParseError
-  | Codegen CodegenError
-
-instance Show Error where
-  show (Parsing err) = "Parsing Error: " <> show err
-  show (Codegen err) = "Compile Error: " <> show err
 
 codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
 codegen initState functions =
@@ -50,9 +43,7 @@ codegen initState functions =
     $ bimap Codegen id
     $ execStateT (runEvm (C.codegenPhases functions)) initState
 
-type AST = [S.FunStmt]
-
-parse :: MonadIO m => T.Text -> ExceptT Error m AST
+parse :: T.Text -> ExceptT Error IO S.AST
 parse code =
   case P.parse code of
     Left (Parsing -> err) -> throwError err
@@ -93,32 +84,6 @@ data Environment =
     Console
   | Testing
 
-astToAbi :: forall m. MonadError Error m => AST -> m Abi.Abi
-astToAbi = fmap Abi.Abi . mapM func_to_abi
-  where
-    func_to_abi :: S.FunStmt -> m Abi.Function
-    func_to_abi (S.FunStmt (S.FunSig _ name args) _ retTy) = do
-      inputs <- mapM arg_to_abi_input args
-      abi_ret_ty <- to_abi_ty retTy
-      pure $ Abi.Function
-        { Abi._functionName = name
-        , Abi._functionType = Abi.FunctionTypeFunction
-        , Abi._functionConstant = True
-        , Abi._functionPayable = False
-        , Abi._functionInputs = inputs
-        , Abi._functionOutputs = [ Abi.Output "output_name" abi_ret_ty ]
-        }
-
-    arg_to_abi_input :: (S.PrimType, S.Name) -> m Abi.Input
-    arg_to_abi_input (ty, name) = Abi.Input name <$> (to_abi_ty ty)
-
-    to_abi_ty :: S.PrimType -> m Abi.AbiType
-    to_abi_ty = \case
-      S.TInt -> pure Abi.AbiTy_uint256
-      S.TChar -> pure Abi.AbiTy_char
-      S.TBool -> pure Abi.AbiTy_bool
-      ty -> throwError $ Codegen $ InternalError $ "Don't know how to convert type " <> show ty <> " to abi representation"
-
 main :: IO ()
 main = do
   Options mode inputFile <- parseOptions
@@ -149,11 +114,11 @@ main = do
             callProcess "rm" ["yis"]
             hClose hout
         Deploy -> do
-          ast <- parse code
-          abi <- Abi.encodeAbi <$> astToAbi ast
-          bytecode <- codegen initCodegenState ast
-          liftIO $ callProcess "cp" ["deployment/deployment.js", "deployment/deployment.current.js"]
-          liftIO $ callProcess "sed" ["-i", "", "s/@bin@/" <> T.unpack bytecode <> "/", "deployment/deployment.current.js"]
-          liftIO $ callProcess "sed" ["-i", "", "s/@abi@/" <> TL.unpack abi <> "/g", "deployment/deployment.current.js"]
+          (bytecode, abi) <- prepareDeployment
+                               code
+                               parse
+                               AbiBridge.astToAbi
+                               (codegen initCodegenState)
+          liftIO $ runDeployment (T.unpack bytecode) (TL.unpack abi)
         RewindDeploy -> do
-          liftIO $ callProcess "rm" ["deployment/deployment.current.js"]
+          liftIO rewindDeployment
