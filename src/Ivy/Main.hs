@@ -24,7 +24,7 @@ import           Text.Pretty.Simple (pPrint)
 import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
-import           Ivy.Codegen.Types (CodegenState (..), Env, Sig (..),
+import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
                                     initProgram, runEvm)
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,
                                  runDeployment)
@@ -66,7 +66,10 @@ execByteCode env byteCode = do
 
 -- Given the address of the deployer, prepares the environment
 initEnv :: Integer -> Env
-initEnv _userAddr = (Sig "main" [] S.TInt, [M.empty])
+initEnv _userAddr = Env
+  { _sig      = Sig "main" [] S.TInt
+  , _contexts = [M.empty]
+  }
 
 initCodegenState :: CodegenState
 initCodegenState =

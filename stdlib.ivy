@@ -6,8 +6,8 @@ int identity(int k) {
   return k;
 }
 
-char myid(char l) {
-  return l;
+char myid(char k) {
+  return k;
 }
 
 int fib(int n) {

@@ -142,9 +142,16 @@ data Address = VarAddr (Maybe Integer)
              -- ^      PC      Return addr
              deriving Show
 
-data Sig = Sig String [(PrimType, String)] PrimType
-type Env = (Sig, [Context]) -- A stack
 type Context = M.Map String (PrimType, Address)
+
+data Sig = Sig String [(PrimType, String)] PrimType
+
+data Env = Env
+  { _sig :: Sig
+  , _contexts :: [Context] -- Essentially a stack
+  }
+
+makeLenses ''Env
 
 data MemBlock = MemBlock
   { _memBlockIndex     :: Integer

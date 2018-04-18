@@ -15,8 +15,7 @@ module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import           Control.Arrow ((***))
-import           Control.Lens hiding (Context, assign, index, op)
+import           Control.Lens hiding (Context, assign, index, op, contexts)
 import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
@@ -47,12 +46,12 @@ class ContextM m where
 
 instance ContextM Evm where
   updateCtx f =
-    env %= (id *** updateCtx')
+    env %= (contexts %~ updateCtx')
       where
         updateCtx' []       = []
         updateCtx' (ctx:xs) = f ctx : xs
   lookup name =
-    go =<< snd <$> use env
+    go =<< _contexts <$> use env
     where
       go :: [Context] -> Evm (VariableStatus VarsVar)
       go [] = return NotDeclared
@@ -65,7 +64,7 @@ instance ContextM Evm where
           decideVar (ty, Nothing)   = return (Decl ty)
           decideVar (ty, Just addr) = return (Def ty addr)
   lookupFun name =
-    go =<< snd <$> use env
+    go =<< _contexts <$> use env
       where
         go [] = return NotDeclared
         go (ctx:xs) =
@@ -73,9 +72,9 @@ instance ContextM Evm where
             Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
             Just _ -> throwError $ InternalError $ "Another case for context (2)"
             Nothing -> go xs
-  createCtx = env %= (id *** (M.empty :))
-  popCtx = env %= (id *** tail)
-  updateSig sig = env %= (const sig *** id)
+  createCtx = env %= (contexts %~ (M.empty :))
+  popCtx = env %= (contexts %~ tail)
+  updateSig sig' = env %= (sig .~ sig')
 
 -- | Class of monads that can perform typechecking
 class TcM m where
@@ -242,16 +241,14 @@ type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError C
 
 data TOperand a = TOperand Addr
 
-registerFunction :: forall m. (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, MonadState CodegenState m) => Name -> [(PrimType, Name)] -> m ()
-registerFunction _name args = do
-  foldM_ allocArg 0 args
-    where
-      allocArg :: Integer -> (PrimType, Name) -> m Integer
-      allocArg paramOrder (ty, argName) = do
-        addr <- alloc (sizeof ty)
-        declVar ty argName
-        assign ty argName addr
-        pure (paramOrder + 1)
+registerFunctionArgs :: forall m. (CodegenM m) => [(PrimType, Name)] -> m ()
+registerFunctionArgs = traverse_ register_arg
+  where
+    register_arg :: (PrimType, Name) -> m ()
+    register_arg (ty, name) = do
+      addr <- alloc (sizeof ty)
+      declVar ty name
+      assign ty name addr
 
 resetMemory :: CodegenM m => m ()
 resetMemory = do
@@ -273,12 +270,11 @@ sigToKeccak256 (FunSig _ name args) = do
           Right abiTy -> pure $ show abiTy
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
-codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
-  sigToKeccak256 sig >>= \case
+codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
+  sigToKeccak256 signature >>= \case
     Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
     Just fnNameHash -> do
-      resetMemory
-      registerFunction name args
+      resetMemory -- TODO: remove this after we get persistence
       rec
           -- Function's case statement. If name does not match, we don't enter to this function.
           offset <- use funcOffset
@@ -306,7 +302,11 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
       return ()
     where
       executeFunBlock :: forall m. CodegenM m => Block -> m Operand
-      executeFunBlock (Block stmts) = go stmts
+      executeFunBlock (Block stmts) = do
+        createCtx
+        *> registerFunctionArgs args
+        *> go stmts
+        <* popCtx
         where
           go :: [Stmt] -> m Operand
           go []             = throwError NoReturnStatement
@@ -318,6 +318,9 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
             return operand
           go (stmt:xs)      = codegenStmt stmt >> go xs
 
+      -- | 0x04 magic number is the number of bytes CALLDATALOAD spends
+      -- for determining function name. It's all parameter data after
+      -- 0x04 bytes, if any.
       storeParameters :: forall m. CodegenM m => [(PrimType, Name)] -> m ()
       storeParameters = foldM_ storeParamsFold (0x04, 0x00)
 
