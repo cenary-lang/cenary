@@ -256,82 +256,83 @@ resetMemory = do
   memory .= initMemory
   memPointer .= 0
 
-sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m (Maybe b)
+sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m b
 sigToKeccak256 (FunSig _ name args) = do
   argRep <- show_args
-  pure $ keccak256 (name <> "(" <> argRep <> ")")
-    where
-      show_args :: m String
-      show_args = intercalate "," <$> (mapM show_arg args)
+  let fnRep = name <> "(" <> argRep <> ")"
+  case keccak256 fnRep of
+    Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
+    Just hash -> pure hash
+  where
+    show_args :: m String
+    show_args = intercalate "," <$> (mapM show_arg args)
 
-      show_arg :: (PrimType, Name) -> m String
-      show_arg (ty, _) =
-        case toAbiTy ty of
-          Left err -> throwError $ InternalError err
-          Right abiTy -> pure $ show abiTy
+    show_arg :: (PrimType, Name) -> m String
+    show_arg (ty, _) =
+      case toAbiTy ty of
+        Left err -> throwError $ InternalError err
+        Right abiTy -> pure $ show abiTy
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
-  sigToKeccak256 signature >>= \case
-    Nothing -> throwError $ InternalError $ "Could not take the keccak256 hash of the function name: " <> name
-    Just fnNameHash -> do
-      resetMemory -- TODO: remove this after we get persistence
-      rec
-          -- Function's case statement. If name does not match, we don't enter to this function.
-          offset <- use funcOffset
-          push4 fnNameHash
-          push1 0xe0
-          push1 0x02
-          exp
-          push1 0x00
-          calldataload
-          div
-          eq
-          iszero
-          push32 (functionOut - offset)
-          jumpi
+  fnNameHash <- sigToKeccak256 signature
+  resetMemory -- TODO: remove this after we get persistence
+  rec
+      -- Function's case statement. If name does not match, we don't enter to this function.
+      offset <- use funcOffset
+      push4 fnNameHash
+      push1 0xe0
+      push1 0x02
+      exp
+      push1 0x00
+      calldataload
+      div
+      eq
+      iszero
+      push32 (functionOut - offset)
+      jumpi
 
-          -- Store parameters
-          storeParameters args
+      -- Store parameters
+      storeParameters args
 
-          -- Function body
-          funPc <- use pc
-          Operand retTy retAddr <- executeFunBlock block
-          checkTyEq "function definition" retTyAnnot retTy
-          functionOut <- jumpdest
-      updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
-      return ()
-    where
-      executeFunBlock :: forall m. CodegenM m => Block -> m Operand
-      executeFunBlock (Block stmts) = do
-        createCtx
-        *> registerFunctionArgs args
-        *> go stmts
-        <* popCtx
-        where
-          go :: [Stmt] -> m Operand
-          go []             = throwError NoReturnStatement
-          go [SReturn expr] = do
-            operand@(Operand _ty addr) <- codegenExpr expr
-            push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
-            push32 addr
-            op_return
-            return operand
-          go (stmt:xs)      = codegenStmt stmt >> go xs
+      -- Function body
+      funPc <- use pc
+      Operand retTy retAddr <- executeFunBlock block
+      checkTyEq "function definition" retTyAnnot retTy
+      functionOut <- jumpdest
+  updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
+  return ()
+  where
+    executeFunBlock :: forall m. CodegenM m => Block -> m Operand
+    executeFunBlock (Block stmts) = do
+      createCtx
+      *> registerFunctionArgs args
+      *> go stmts
+      <* popCtx
+      where
+        go :: [Stmt] -> m Operand
+        go []             = throwError NoReturnStatement
+        go [SReturn expr] = do
+          operand@(Operand _ty addr) <- codegenExpr expr
+          push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
+          push32 addr
+          op_return
+          return operand
+        go (stmt:xs)      = codegenStmt stmt >> go xs
 
-      -- | 0x04 magic number is the number of bytes CALLDATALOAD spends
-      -- for determining function name. It's all parameter data after
-      -- 0x04 bytes, if any.
-      storeParameters :: forall m. CodegenM m => [(PrimType, Name)] -> m ()
-      storeParameters = foldM_ storeParamsFold (0x04, 0x00)
+    -- | 0x04 magic number is the number of bytes CALLDATALOAD spends
+    -- for determining function name. It's all parameter data after
+    -- 0x04 bytes, if any.
+    storeParameters :: forall m. CodegenM m => [(PrimType, Name)] -> m ()
+    storeParameters = foldM_ storeParamsFold (0x04, 0x00)
 
-      storeParamsFold :: forall m. CodegenM m => (Integer, Integer) -> (PrimType, Name) -> m (Integer, Integer)
-      storeParamsFold (paramOffset, memOffset) (_ty, _name) =
-           push32 paramOffset
-        *> calldataload
-        *> push32 memOffset
-        *> mstore
-        $> (paramOffset + 0x20, memOffset + 0x20) -- TODO: ASSUMPTION: uint32
+    storeParamsFold :: forall m. CodegenM m => (Integer, Integer) -> (PrimType, Name) -> m (Integer, Integer)
+    storeParamsFold (paramOffset, memOffset) (_ty, _name) =
+         push32 paramOffset
+      *> calldataload
+      *> push32 memOffset
+      *> mstore
+      $> (paramOffset + 0x20, memOffset + 0x20) -- TODO: ASSUMPTION: uint32
 
 takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
 takeArgsToContext funcName registryArgs callerArgs = do
