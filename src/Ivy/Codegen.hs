@@ -183,7 +183,12 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       push32 oldAddr
       add
       store
-    Def other _ -> throwError $ InternalError $ "codegenStmt ArrAssignment: non-array type is in symbol table as a definition for ArrAssignment code generation: " <> show other
+    Def other _ ->
+        throwError
+      $ InternalError
+      $ "codegenStmt ArrAssignment: non-array type is in symbol table"
+      <> "as a definition for ArrAssignment code generation: "
+      <> show other
 
 codegenStmt (SVarDecl ty name) =
   declVar ty name
@@ -199,8 +204,7 @@ codegenStmt (SIf ePred bodyBlock) = do
   load addrPred
   iszero -- Negate for jumping condition
 
-  -- offset <- estimateOffset bodyBlock
-  rec push32 ifOut -- +3 because of the following `PC`, `ADD` and `JUMPI` instructions.)
+  rec push32 ifOut
       jumpi
 
       void $ executeBlock bodyBlock
@@ -213,15 +217,12 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
 
   load addrPred
   iszero -- Negate for jumping condition
-  -- trueOffset <- estimateOffset trueBlock
-  rec -- let trueJumpDest = pcCosts [PC, ADD, JUMPI, PUSH32 0, PC, ADD, JUMP] + trueOffset
+  rec
       push32 trueDest
       jumpi
 
       executeBlock trueBlock
-      -- falseOffset <- estimateOffset falseBlock
 
-      -- let falseJumpDest = pcCosts [PC, ADD, JUMP, JUMPDEST] + falseOffset
       push32 falseDest
       jump
 
@@ -355,12 +356,10 @@ codegenFunCall name args = do
     FunDef retTy funAddr retAddr -> do
       -- Preparing checkpoint
       rec push32 funcDest
-
           -- Jumping to function
           push32 funAddr
           jump
           funcDest <- jumpdest
-
       return (Operand retTy retAddr)
 
 codegenExpr :: forall m. CodegenM m => Expr -> m Operand
@@ -457,8 +456,6 @@ initPhase functionCosts = do
 
 bodyPhase
   :: CodegenM m
-  -- => Integer
-  -- ^ Offset caused by initPhase.
   => [FunStmt]
   -> m ()
 bodyPhase = traverse_ codegenFunDef
