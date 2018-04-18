@@ -25,7 +25,7 @@ import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
-                                    initProgram, runEvm)
+                                    initProgram, runEvm, FuncRegistry (..))
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,
                                  runDeployment)
 import           Ivy.Error
@@ -78,7 +78,7 @@ initCodegenState =
     , _memory           = initMemory
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
-    , _funcRegistry     = M.empty
+    , _funcRegistry     = FuncRegistry M.empty
     , _program          = initProgram
     , _funcOffset       = 0
     }

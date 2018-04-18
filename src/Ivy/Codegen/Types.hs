@@ -162,7 +162,17 @@ makeLenses ''MemBlock
 
 type MemPointers = M.Map Size MemBlock
 
-type FuncRegistry = M.Map String [(PrimType, String, Integer)]
+data FuncRegistryArgInfo = FuncRegistryArgInfo
+  { _argTy :: PrimType
+  , _argName :: String
+  , _argAddr :: Integer
+  }
+
+data FuncRegistry = FuncRegistry
+  { _argsAddresses :: !(M.Map String [FuncRegistryArgInfo])
+  }
+
+makeLenses ''FuncRegistry
 
 -- | TODO: This should have its own module
 newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }

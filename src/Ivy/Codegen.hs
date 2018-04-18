@@ -15,24 +15,23 @@ module Ivy.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
-import           Control.Lens hiding (Context, assign, index, op, contexts)
+import           Control.Lens hiding (Context, assign, contexts, index, op)
 import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
 import           Data.Foldable (traverse_)
-import           Data.Functor (($>))
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
+import           Ivy.AbiBridge
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.API
 import           Ivy.Syntax
-import Ivy.AbiBridge
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -240,14 +239,11 @@ codegenStmt (SExpr expr) = void (codegenExpr expr)
 -- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
-data TOperand a = TOperand Addr
-
-registerFunctionArgs :: forall m. (CodegenM m) => [(PrimType, Name)] -> m ()
-registerFunctionArgs = traverse_ register_arg
+putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgInfo -> m ()
+putFnArgsToContext = traverse_ register_arg
   where
-    register_arg :: (PrimType, Name) -> m ()
-    register_arg (ty, name) = do
-      addr <- alloc (sizeof ty)
+    register_arg :: FuncRegistryArgInfo -> m ()
+    register_arg (FuncRegistryArgInfo ty name addr) = do
       declVar ty name
       assign ty name addr
 
@@ -270,13 +266,13 @@ sigToKeccak256 (FunSig _ name args) = do
     show_arg :: (PrimType, Name) -> m String
     show_arg (ty, _) =
       case toAbiTy ty of
-        Left err -> throwError $ InternalError err
+        Left err    -> throwError $ InternalError err
         Right abiTy -> pure $ show abiTy
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
   fnNameHash <- sigToKeccak256 signature
-  resetMemory -- TODO: remove this after we get persistence
+  -- resetMemory -- TODO: remove this after we get persistence
   rec
       -- Function's case statement. If name does not match, we don't enter to this function.
       offset <- use funcOffset
@@ -293,20 +289,20 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       jumpi
 
       -- Store parameters
-      storeParameters args
+      addressedArgs <- storeParameters
 
       -- Function body
       funPc <- use pc
-      Operand retTy retAddr <- executeFunBlock block
+      Operand retTy retAddr <- executeFunBlock addressedArgs block
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
   where
-    executeFunBlock :: forall m. CodegenM m => Block -> m Operand
-    executeFunBlock (Block stmts) = do
+    executeFunBlock :: forall m. CodegenM m => [FuncRegistryArgInfo] -> Block -> m Operand
+    executeFunBlock addressedArgs (Block stmts) = do
       createCtx
-      *> registerFunctionArgs args
+      *> putFnArgsToContext addressedArgs
       *> go stmts
       <* popCtx
       where
@@ -323,34 +319,27 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
     -- | 0x04 magic number is the number of bytes CALLDATALOAD spends
     -- for determining function name. It's all parameter data after
     -- 0x04 bytes, if any.
-    storeParameters :: forall m. CodegenM m => [(PrimType, Name)] -> m ()
-    storeParameters = foldM_ storeParamsFold (0x04, 0x00)
+    storeParameters :: forall m. CodegenM m => m [FuncRegistryArgInfo]
+    storeParameters = do
+      (_, registryArgInfo) <- foldM storeParamsFold (0x04, []) args
+      funcRegistry %= (argsAddresses %~ M.insert name registryArgInfo)
+      pure registryArgInfo
 
-    storeParamsFold :: forall m. CodegenM m => (Integer, Integer) -> (PrimType, Name) -> m (Integer, Integer)
-    storeParamsFold (paramOffset, memOffset) (_ty, _name) =
-         push32 paramOffset
-      *> calldataload
-      *> push32 memOffset
-      *> mstore
-      $> (paramOffset + 0x20, memOffset + 0x20) -- TODO: ASSUMPTION: uint32
-
-takeArgsToContext :: forall m. CodegenM m => String -> [(PrimType, String, Integer)] -> [Operand] -> m ()
-takeArgsToContext funcName registryArgs callerArgs = do
-  unless (length registryArgs == length callerArgs) $
-    throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
-  mapM_ bindArg (zip registryArgs callerArgs)
-    where
-      bindArg :: ((PrimType, String, Integer), Operand) -> m ()
-      bindArg ((registryTy, registryName, registryAddr), Operand callerTy callerAddr) = do
-        checkTyEq registryName registryTy callerTy
-        storeAddressed callerAddr registryAddr
+    storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
+    storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
+      argAddr <- alloc (sizeof argTy)
+      push32 calldataOffset
+      calldataload
+      push32 argAddr
+      mstore
+      pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName argAddr : registryInfo) -- TODO: ASSUMPTION: uint32
 
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
-  registry <- use funcRegistry
-  case M.lookup name registry of
+  FuncRegistry registryMap <- use funcRegistry
+  case M.lookup name registryMap of
     Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
-    Just registryArgs -> takeArgsToContext name registryArgs =<< mapM codegenExpr args
+    Just registryArgs -> write_func_args name registryArgs =<< mapM codegenExpr args
 
   lookupFun name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
@@ -362,6 +351,17 @@ codegenFunCall name args = do
           jump
           funcDest <- jumpdest
       return (Operand retTy retAddr)
+  where
+  write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand] -> m ()
+  write_func_args funcName registryArgs callerArgs = do
+    unless (length registryArgs == length callerArgs) $
+      throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
+    mapM_ bindArg (zip registryArgs callerArgs)
+      where
+        bindArg :: (FuncRegistryArgInfo, Operand) -> m ()
+        bindArg (FuncRegistryArgInfo registryTy registryName registryAddr, Operand callerTy callerAddr) = do
+          checkTyEq registryName registryTy callerTy
+          storeAddressed callerAddr registryAddr
 
 codegenExpr :: forall m. CodegenM m => Expr -> m Operand
 codegenExpr (EFunCall name args) =
