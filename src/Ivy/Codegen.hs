@@ -247,11 +247,6 @@ putFnArgsToContext = traverse_ register_arg
       declVar ty name
       assign ty name addr
 
-resetMemory :: CodegenM m => m ()
-resetMemory = do
-  memory .= initMemory
-  memPointer .= 0
-
 sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m b
 sigToKeccak256 (FunSig _ name args) = do
   argRep <- show_args
@@ -272,7 +267,6 @@ sigToKeccak256 (FunSig _ name args) = do
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
   fnNameHash <- sigToKeccak256 signature
-  -- resetMemory -- TODO: remove this after we get persistence
   rec
       -- Function's case statement. If name does not match, we don't enter to this function.
       offset <- use funcOffset
