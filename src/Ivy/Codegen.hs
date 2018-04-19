@@ -199,15 +199,12 @@ codegenStmt (SDeclAndAssignment ty name val) = do
 codegenStmt (SIf ePred bodyBlock) = do
   Operand tyPred addrPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
-
-  load addrPred
-  iszero -- Negate for jumping condition
-
-  rec push32 ifOut
-      jumpi
-
-      void $ executeBlock bodyBlock
-      ifOut <- jumpdest
+  offset <- use funcOffset
+  -- Loving this syntax style, should switch to lisp maybe
+  branchIf
+    (offset)
+    (load addrPred)
+    (void (executeBlock bodyBlock))
   pure ()
 
 codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
@@ -313,19 +310,10 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
           operand@(Operand _ty addr) <- codegenExpr expr
           offset <- use funcOffset
 
-          rec load 0x00
-              push32 (retEnd - offset)
-              jumpi
-
-              push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
-              push32 addr
-              op_return
-              push32 (branchEnd - offset)
-              jump
-
-              retEnd <- jumpdest
-              jump
-              branchEnd <- jumpdest
+          branchIfElse (offset)
+                       (load 0x00)
+                       (jump)
+                       (push32 (addr + 0x20) >> push32 addr >> op_return)
 
           return operand
         go (stmt:xs)      = codegenStmt stmt >> go xs
@@ -356,6 +344,28 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       mstore
       pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName argAddr : registryInfo) -- TODO: ASSUMPTION: uint32
 
+branchIf :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m ()
+branchIf offset loadPred ifComp = do
+  rec loadPred
+      iszero -- Jump if predicate is zero
+      push32 (branchEnd - offset)
+      jumpi
+      ifComp
+      branchEnd <- jumpdest
+  pure ()
+
+branchIfElse :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m () -> m ()
+branchIfElse offset loadPred ifComp elseComp = do
+  rec loadPred
+      push32 (elseEndIfBegin - offset)
+      jumpi
+      elseComp
+      push32 (branchEnd - offset)
+      elseEndIfBegin <- jumpdest
+      ifComp
+      branchEnd <- jumpdest
+  pure()
+
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
   FuncRegistry registryMap <- use funcRegistry
@@ -369,13 +379,11 @@ codegenFunCall name args = do
     FunDef retTy funAddr retAddr -> do
       storeVal 0x01 0x00
       offset <- use funcOffset
-      -- Preparing checkpoint
       rec push32 (funcDest - offset)
-          -- Jumping to function
           push32 (funAddr - offset)
           jump
           funcDest <- jumpdest
-          storeVal 0x00 0x00
+      storeVal 0x00 0x00
       return (Operand retTy retAddr)
   where
   write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand] -> m ()
@@ -485,4 +493,9 @@ bodyPhase
   :: CodegenM m
   => [FunStmt]
   -> m ()
-bodyPhase stmts = alloc (sizeof TInt) >> traverse_ codegenFunDef stmts
+bodyPhase stmts = do
+  -- We use first 32 bytes (between 0x00 and 0x20) to determine 
+  -- whether a function is called internally or from outside
+  _ <- alloc (sizeof TInt)
+
+  traverse_ codegenFunDef stmts
