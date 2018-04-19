@@ -288,11 +288,12 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       push32 (functionOut - offset)
       jumpi
 
+      funPc <- jumpdest
+
       -- Store parameters
       addressedArgs <- storeParameters
 
       -- Function body
-      funPc <- use pc
       Operand retTy retAddr <- executeFunBlock addressedArgs block
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
@@ -310,9 +311,22 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
         go []             = throwError NoReturnStatement
         go [SReturn expr] = do
           operand@(Operand _ty addr) <- codegenExpr expr
-          push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
-          push32 addr
-          op_return
+          offset <- use funcOffset
+
+          rec load 0x00
+              push32 (retEnd - offset)
+              jumpi
+
+              push32 (addr + 0x20) -- TODO: ASSUMPTION: uint32
+              push32 addr
+              op_return
+              push32 (branchEnd - offset)
+              jump
+
+              retEnd <- jumpdest
+              jump
+              branchEnd <- jumpdest
+
           return operand
         go (stmt:xs)      = codegenStmt stmt >> go xs
 
@@ -321,13 +335,21 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
     -- 0x04 bytes, if any.
     storeParameters :: forall m. CodegenM m => m [FuncRegistryArgInfo]
     storeParameters = do
-      (_, registryArgInfo) <- foldM storeParamsFold (0x04, []) args
-      funcRegistry %= (argsAddresses %~ M.insert name registryArgInfo)
+      offset <- use funcOffset
+      rec load 0x00
+          push32 (fillingEnd - offset)
+          jumpi
+
+          (_, registryArgInfo) <- foldM storeParamsFold (0x04, []) args
+          funcRegistry %= (argsAddresses %~ M.insert name registryArgInfo)
+
+          fillingEnd <- jumpdest
       pure registryArgInfo
 
     storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
     storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
       argAddr <- alloc (sizeof argTy)
+      -- Fill arg addresses with incoming values from the call
       push32 calldataOffset
       calldataload
       push32 argAddr
@@ -342,14 +364,18 @@ codegenFunCall name args = do
     Just registryArgs -> write_func_args name registryArgs =<< mapM codegenExpr args
 
   lookupFun name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
+    NotDeclared ->
+      throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
     FunDef retTy funAddr retAddr -> do
+      storeVal 0x01 0x00
+      offset <- use funcOffset
       -- Preparing checkpoint
-      rec push32 funcDest
+      rec push32 (funcDest - offset)
           -- Jumping to function
-          push32 funAddr
+          push32 (funAddr - offset)
           jump
           funcDest <- jumpdest
+          storeVal 0x00 0x00
       return (Operand retTy retAddr)
   where
   write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand] -> m ()
@@ -459,4 +485,4 @@ bodyPhase
   :: CodegenM m
   => [FunStmt]
   -> m ()
-bodyPhase = traverse_ codegenFunDef
+bodyPhase stmts = alloc (sizeof TInt) >> traverse_ codegenFunDef stmts
