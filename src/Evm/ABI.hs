@@ -19,6 +19,7 @@ import           Data.Aeson.TH
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
+import           Data.Semigroup ((<>))
 
 encodeAbi :: Abi -> TL.Text
 encodeAbi = TL.decodeUtf8 . encode
@@ -55,12 +56,14 @@ data AbiType =
   | AbiTy_string
   | AbiTy_char
   | AbiTy_bool
+  | AbiTy_arrayOf AbiType
 
 instance Show AbiType where
   show AbiTy_uint256 = "uint256"
   show AbiTy_string  = "string"
   show AbiTy_char    = "bytes1"
   show AbiTy_bool    = "bool"
+  show (AbiTy_arrayOf ty) = show ty <> "[]"
 
 instance ToJSON AbiType where
   toJSON ty = JSON.String (T.pack (show ty))

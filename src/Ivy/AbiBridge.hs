@@ -19,7 +19,13 @@ toAbiTy = \case
   S.TInt -> pure Abi.AbiTy_uint256
   S.TChar -> pure Abi.AbiTy_char
   S.TBool -> pure Abi.AbiTy_bool
+  S.TDynArray ty -> Abi.AbiTy_arrayOf <$> toAbiTy ty
   ty -> throwError $ "Don't know how to convert type " <> show ty <> " to abi representation"
+
+withCodegenErr :: MonadError Error m => Either String a -> m a
+withCodegenErr = \case
+  Left err -> throwError $ Codegen $ InternalError err
+  Right v -> pure v
 
 astToAbi :: MonadError Error m => S.AST -> m T.Text
 astToAbi = transformAstToAbi astToAbiIR Abi.encodeAbi
@@ -51,12 +57,4 @@ astToAbiIR = fmap Abi.Abi . mapM func_to_abi
             }
 
     arg_to_abi_input :: (S.PrimType, S.Name) -> m Abi.Input
-    arg_to_abi_input (ty, name) = Abi.Input name <$> (to_abi_ty ty)
-
-    to_abi_ty :: S.PrimType -> m Abi.AbiType
-    to_abi_ty = \case
-      S.TInt -> pure Abi.AbiTy_uint256
-      S.TChar -> pure Abi.AbiTy_char
-      S.TBool -> pure Abi.AbiTy_bool
-      ty -> throwError $ Codegen $ InternalError $ "Don't know how to convert type " <> show ty <> " to abi representation"
-
+    arg_to_abi_input (ty, name) = Abi.Input name <$> (withCodegenErr (toAbiTy ty))

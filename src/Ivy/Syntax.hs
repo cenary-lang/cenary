@@ -32,6 +32,7 @@ data PrimType =
   | TChar
   | TBool
   | TArray Length PrimType
+  | TDynArray PrimType
   | TFun PrimType
   deriving (Show, Eq)
 

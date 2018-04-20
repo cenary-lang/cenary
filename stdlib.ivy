@@ -10,6 +10,10 @@ char myid(char k) {
   return k;
 }
 
+int myfun(int[] k) {
+  return 5;
+}
+
 int fib(int n) {
   int a = 0;
   int b = 1;

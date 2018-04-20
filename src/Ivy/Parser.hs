@@ -124,9 +124,16 @@ tyArray = do
   char' ']'
   return (TArray size type')
 
+tyDynamicArray :: Parser PrimType
+tyDynamicArray = do
+  type' <- typeAnnot
+  char' '['
+  char' ']'
+  return (TDynArray type')
+
 typedIdentifier :: Parser (PrimType, Name)
 typedIdentifier = do
-  type' <- try tyArray <|> typeAnnot
+  type' <- try tyArray <|> try tyDynamicArray <|> typeAnnot
   whitespace
   name <- identifier
   return (type', name)
@@ -173,7 +180,7 @@ arrAssignment = do
 
 declAndAssignment :: Parser Stmt
 declAndAssignment = do
-  type' <- try tyArray <|> typeAnnot
+  type' <- try tyArray <|> try tyDynamicArray <|> typeAnnot
   whitespace
   name <- identifier
   reserved "="

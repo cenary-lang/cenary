@@ -88,7 +88,7 @@ binOp t op left right = do
   load right
   load left
   op
-  addr <- alloc (sizeof t)
+  addr <- alloc
   push addr
   store
   return (Operand t addr)
@@ -264,8 +264,8 @@ sigToKeccak256 (FunSig _ name args) = do
         Left err    -> throwError $ InternalError err
         Right abiTy -> pure $ show abiTy
 
-codegenFunDef :: CodegenM m => FunStmt -> m ()
-codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
+codegenFunDef :: CodegenM m => Integer -> FunStmt -> m ()
+codegenFunDef heapBegin (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
   fnNameHash <- sigToKeccak256 signature
   rec
       -- Function's case statement. If name does not match, we don't enter to this function.
@@ -321,7 +321,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
     storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
     storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
-      argAddr <- alloc (sizeof argTy)
+      argAddr <- alloc
       push32 calldataOffset
       calldataload
       push32 argAddr
@@ -378,17 +378,17 @@ codegenExpr (EArrIdentifier name index) =
     Def ty _ -> throwError (IllegalArrAccess name ty)
 
 codegenExpr (EInt val) = do
-  addr <- alloc (sizeof TInt)
+  addr <- alloc
   storeVal val addr
   return (Operand TInt addr)
 
 codegenExpr (EChar val) = do
-  addr <- alloc (sizeof TChar)
+  addr <- alloc
   storeVal (fromIntegral (ord val)) addr
   return (Operand TChar addr)
 
 codegenExpr (EBool val) = do
-  addr <- alloc (sizeof TBool)
+  addr <- alloc
   storeVal (boolToInt val) addr
   return (Operand TBool addr)
 
@@ -412,7 +412,7 @@ codegenExpr (EBinop binop expr1 expr2) = do
 codegenExpr (EArray len elemExprs) = do
   elems <- mapM codegenExpr elemExprs
   elemTy <- testOperandsSameTy elems
-  addr <- allocBulk len (sizeof elemTy)
+  addr <- allocBulk len
   return (Operand (TArray len elemTy) addr)
   where
     testOperandsSameTy :: [Operand] -> m PrimType
@@ -453,4 +453,7 @@ bodyPhase
   :: CodegenM m
   => [FunStmt]
   -> m ()
-bodyPhase = traverse_ codegenFunDef
+bodyPhase functions = do
+  rec traverse_ (codegenFunDef stackSize) functions
+      stackSize <- use stackMemSize
+  pure ()
