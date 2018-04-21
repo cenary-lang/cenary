@@ -32,6 +32,7 @@ data PrimType =
   | TChar
   | TBool
   | TArray Length PrimType
+  | TDynArr PrimType
   | TFun PrimType
   deriving (Show, Eq)
 
@@ -65,5 +66,6 @@ data Expr =
   | EArrIdentifier Name Expr
   | EBinop Op Expr Expr
   | EFunCall String [Expr]
-  | EArray Length [Expr]
+  | EArr Length [Expr]
+  | EDynArr
   deriving (Show, Eq)

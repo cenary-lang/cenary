@@ -36,9 +36,9 @@ import           Ivy.Syntax
 
 -- | Class of monads that are able to read and update context
 class ContextM m where
-  updateCtx :: (Context -> Context) -> m ()
-  lookup :: String -> m (VariableStatus VarsVar)
-  lookupFun :: String -> m (VariableStatus VarsFun)
+  updateCtx :: (Context m -> Context m) -> m ()
+  lookup :: String -> m (VariableStatus m VarsVar)
+  lookupFun :: String -> m (VariableStatus m VarsFun)
   createCtx :: m ()
   popCtx :: m ()
   updateSig :: Sig -> m ()
@@ -52,7 +52,7 @@ instance ContextM Evm where
   lookup name =
     go =<< _contexts <$> use env
     where
-      go :: [Context] -> Evm (VariableStatus VarsVar)
+      go :: [Context f] -> Evm (VariableStatus f VarsVar)
       go [] = return NotDeclared
       go (ctx:xs) =
         case M.lookup name ctx of
@@ -83,15 +83,15 @@ instance TcM Evm where
   checkTyEq name tyL tyR =
     unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
-binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> Integer -> Integer -> m Operand
+binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> OperandAddr m -> OperandAddr m -> m (Operand m)
 binOp t op left right = do
-  load right
-  load left
+  loadAddr right
+  loadAddr left
   op
   addr <- alloc (sizeof t)
   push addr
-  store
-  return (Operand t addr)
+  mstore
+  return (mkOperand t addr)
 
 executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
@@ -103,7 +103,7 @@ assign
   :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m)
   => PrimType
   -> Name
-  -> Integer
+  -> OperandAddr m
   -> m ()
 assign tyR name addr =
   lookup name >>= \case
@@ -113,7 +113,7 @@ assign tyR name addr =
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
     Def tyL oldAddr -> do
       checkTyEq name tyL tyR
-      storeAddressed addr oldAddr
+      store addr oldAddr
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
 
 declVar
@@ -133,7 +133,7 @@ codegenStmt (SWhile pred block) = do
   Operand predTy predAddr <- codegenExpr pred
   checkTyEq "index_of_while_pred" TBool predTy
 
-  load predAddr
+  loadAddr predAddr
   iszero -- Reversing this bit because we jump to outside of while initally if predicate is false
 
   offset <- use funcOffset
@@ -152,7 +152,7 @@ codegenStmt (SWhile pred block) = do
       -- Load predicate again
       Operand predTy' predAddr' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
-      load predAddr'
+      loadAddr predAddr'
 
       -- Jump to destination back if target value is nonzero
       swap1
@@ -171,17 +171,18 @@ codegenStmt stmt@(SArrAssignment name index val) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL -> throwError (NonInitializedArrayAccess name)
-    Def (TArray _length aTy) oldAddr -> do
+    Def (TArray _length aTy) oldUnknownAddr -> do
+      oldAddr <- enforceStackAddr oldUnknownAddr
       checkTyEq name aTy tyR
 
-      load addr
+      loadAddr addr
 
-      load iAddr
+      loadAddr iAddr
       push32 (sizeInt (sizeof aTy))
       mul
       push32 oldAddr
       add
-      store
+      mstore
     Def other _ ->
         throwError
       $ InternalError
@@ -203,15 +204,15 @@ codegenStmt (SIf ePred bodyBlock) = do
   -- Loving this syntax style, should switch to lisp maybe
   branchIf
     (offset)
-    (load addrPred)
+    (loadAddr addrPred)
     (void (executeBlock bodyBlock))
   pure ()
 
 codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
-  Operand tyPred addrPred <- codegenExpr ePred
+  Operand tyPred predAddr <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
-  load addrPred
+  loadAddr predAddr
   iszero -- Negate for jumping condition
   rec
       push32 trueDest
@@ -242,7 +243,10 @@ putFnArgsToContext = traverse_ register_arg
     register_arg :: FuncRegistryArgInfo -> m ()
     register_arg (FuncRegistryArgInfo ty name addr) = do
       declVar ty name
-      assign ty name addr
+      assign ty name (liftToOperandAddr addr)
+
+liftToOperandAddr :: Integer -> OperandAddr f
+liftToOperandAddr addr = OperandAddr (Left addr)
 
 resetMemory :: CodegenM m => m ()
 resetMemory = do
@@ -265,6 +269,10 @@ sigToKeccak256 (FunSig _ name args) = do
       case toAbiTy ty of
         Left err    -> throwError $ InternalError err
         Right abiTy -> pure $ show abiTy
+
+enforceStackAddr :: MonadError CodegenError m => OperandAddr m -> m Integer
+enforceStackAddr (OperandAddr (Right _)) = throwError $ InternalError $ "enforceStackAddr: Right found"
+enforceStackAddr (OperandAddr (Left addr)) = pure addr
 
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
@@ -291,23 +299,25 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       addressedArgs <- storeParameters
 
       -- Function body
-      Operand retTy retAddr <- executeFunBlock addressedArgs block
+      Operand retTy unknownRetAddr <- executeFunBlock addressedArgs block
+      retAddr <- enforceStackAddr unknownRetAddr
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
   where
-    executeFunBlock :: forall m. CodegenM m => [FuncRegistryArgInfo] -> Block -> m Operand
+    executeFunBlock :: forall m. CodegenM m => [FuncRegistryArgInfo] -> Block -> m (Operand m)
     executeFunBlock addressedArgs (Block stmts) = do
       createCtx
       *> putFnArgsToContext addressedArgs
       *> go stmts
       <* popCtx
       where
-        go :: [Stmt] -> m Operand
+        go :: [Stmt] -> m (Operand m)
         go []             = throwError NoReturnStatement
         go [SReturn expr] = do
-          operand@(Operand _ty addr) <- codegenExpr expr
+          operand@(Operand _ty unknownAddr) <- codegenExpr expr
+          addr <- enforceStackAddr unknownAddr
           offset <- use funcOffset
 
           branchIfElse (offset)
@@ -366,7 +376,7 @@ branchIfElse offset loadPred ifComp elseComp = do
       branchEnd <- jumpdest
   pure()
 
-codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
+codegenFunCall :: CodegenM m => String -> [Expr] -> m (Operand m)
 codegenFunCall name args = do
   FuncRegistry registryMap <- use funcRegistry
   case M.lookup name registryMap of
@@ -384,20 +394,20 @@ codegenFunCall name args = do
           jump
           funcDest <- jumpdest
       storeVal 0x00 0x00
-      return (Operand retTy retAddr)
+      return (mkOperand retTy retAddr)
   where
-  write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand] -> m ()
+  write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand m] -> m ()
   write_func_args funcName registryArgs callerArgs = do
     unless (length registryArgs == length callerArgs) $
       throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
     mapM_ bindArg (zip registryArgs callerArgs)
       where
-        bindArg :: (FuncRegistryArgInfo, Operand) -> m ()
+        bindArg :: (FuncRegistryArgInfo, Operand m) -> m ()
         bindArg (FuncRegistryArgInfo registryTy registryName registryAddr, Operand callerTy callerAddr) = do
           checkTyEq registryName registryTy callerTy
-          storeAddressed callerAddr registryAddr
+          storeOnStack callerAddr registryAddr
 
-codegenExpr :: forall m. CodegenM m => Expr -> m Operand
+codegenExpr :: forall m. CodegenM m => Expr -> m (Operand m)
 codegenExpr (EFunCall name args) =
   codegenFunCall name args
 
@@ -420,17 +430,17 @@ codegenExpr (EArrIdentifier name index) =
 codegenExpr (EInt val) = do
   addr <- alloc (sizeof TInt)
   storeVal val addr
-  return (Operand TInt addr)
+  return (mkOperand TInt addr)
 
 codegenExpr (EChar val) = do
   addr <- alloc (sizeof TChar)
   storeVal (fromIntegral (ord val)) addr
-  return (Operand TChar addr)
+  return (mkOperand TChar addr)
 
 codegenExpr (EBool val) = do
   addr <- alloc (sizeof TBool)
   storeVal (boolToInt val) addr
-  return (Operand TBool addr)
+  return (mkOperand TBool addr)
 
 codegenExpr (EBinop binop expr1 expr2) = do
   Operand ty1 left <- codegenExpr expr1
@@ -449,23 +459,24 @@ codegenExpr (EBinop binop expr1 expr2) = do
     _ -> throwError $ WrongOperandTypes ty1 ty2
   operation left right
 
-codegenExpr (EArray len elemExprs) = do
+codegenExpr (EArr len elemExprs) = do
   elems <- mapM codegenExpr elemExprs
   elemTy <- testOperandsSameTy elems
   addr <- allocBulk len (sizeof elemTy)
-  return (Operand (TArray len elemTy) addr)
+  return (mkOperand (TArray len elemTy) addr)
   where
-    testOperandsSameTy :: [Operand] -> m PrimType
+    testOperandsSameTy :: [Operand m] -> m PrimType
     testOperandsSameTy [] = throwError EmptyArrayValue
     testOperandsSameTy (x:xs) =
       testOperandsHasTy (x ^. operandType) xs
 
-    testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
+    testOperandsHasTy :: PrimType -> [Operand m] -> m PrimType
     testOperandsHasTy ty [] = return ty
     testOperandsHasTy ty (x:xs) =
       if x ^. operandType == ty
         then testOperandsHasTy ty xs
         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
+
 
 codegenPhases :: CodegenM m => [FunStmt] -> m ()
 codegenPhases functions = do

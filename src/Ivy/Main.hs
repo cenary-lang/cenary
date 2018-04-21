@@ -25,7 +25,7 @@ import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
-                                    initProgram, runEvm, FuncRegistry (..))
+                                    initProgram, runEvm, FuncRegistry (..), Evm)
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,
                                  runDeployment)
 import           Ivy.Error
@@ -65,7 +65,7 @@ execByteCode env byteCode = do
           pure hout
 
 -- Given the address of the deployer, prepares the environment
-initEnv :: Integer -> Env
+initEnv :: Integer -> Env Evm
 initEnv _userAddr = Env
   { _sig      = Sig "main" [] S.TInt
   , _contexts = [M.empty]

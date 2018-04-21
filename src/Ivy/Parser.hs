@@ -24,36 +24,41 @@ char' = void . char
 text :: Stream s m Char => T.Text -> ParsecT s u m T.Text
 text input = T.pack <$> string (T.unpack input)
 
-primInt :: Parser Expr
-primInt =
+litInt :: Parser Expr
+litInt =
   EInt <$> integer
 
-primChar :: Parser Expr
-primChar =
+litChar :: Parser Expr
+litChar =
   EChar <$> charLiteral
 
-primBool :: Parser Expr
-primBool =
+litBool :: Parser Expr
+litBool =
   fmap EBool $
     try (reserved "true" $> True)
     <|> (reserved "false" $> False)
 
-primString :: Parser Expr
-primString = do
+litString :: Parser Expr
+litString = do
   str <- map EChar <$> stringLiteral
-  return (EArray (toInteger (length str)) str)
+  return (EArr (toInteger (length str)) str)
 
-eArray :: Parser Expr
-eArray = do
-  elems <- curlied (commaSep ePrim)
-  return (EArray (toInteger (length elems)) elems)
+litArray :: Parser Expr
+litArray = do
+  elems <- curlied (commaSep eLit)
+  return (EArr (toInteger (length elems)) elems)
 
-ePrim :: Parser Expr
-ePrim = try primInt
-    <|> try primChar
-    <|> try primBool
-    <|> try primString
-    <|> eArray
+litDynArray :: Parser Expr
+litDynArray = do
+  EDynArr <$ curlied (pure ())
+
+eLit :: Parser Expr
+eLit = try litInt
+    <|> try litChar
+    <|> try litBool
+    <|> try litString
+    <|> try litArray
+    <|> litDynArray
     <?> "primitive"
 
 term :: Parser Integer
@@ -81,7 +86,7 @@ expr = buildExpressionParser binops expr'
   where
     expr' :: Parser Expr
     expr' = try (parens expr <?> "parens")
-         <|> try ePrim
+         <|> try eLit
          <|> try eFunCall
          <|> try eArrIdentifier
          <|> eIdentifier

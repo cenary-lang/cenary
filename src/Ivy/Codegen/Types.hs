@@ -77,14 +77,27 @@ data CodegenError =
   | SupportError String
   | NoReturnStatement
 
-type Addr = Integer
+data HeapAddress f = HeapAddress (f ()) (f ())
 
-data Operand = Operand
+instance Show (HeapAddress f) where
+  show _ = "A heap loader, what it contains is not known"
+
+newtype OperandAddr f = OperandAddr
+  { _unOperandAddr :: Either Integer (HeapAddress f) }
+  deriving Show
+
+data Operand f = Operand
   { _operandType :: PrimType
-  , _operandAddr :: Addr
+  , _operandAddr :: OperandAddr f
   }
 
 makeLenses ''Operand
+
+mkOperand :: forall f. PrimType -> Integer -> Operand f
+mkOperand ty addr = Operand ty (OperandAddr (Left addr))
+
+mkHeapOperand :: PrimType -> HeapAddress m -> Operand m
+mkHeapOperand ty loader = Operand ty (OperandAddr (Right loader))
 
 instance Show CodegenError where
   show (VariableNotDeclared var details) = "Variable " <> var <> " is not declared. Details: " ++ show details
@@ -136,19 +149,19 @@ data Size =
 type ParamBaseAddrs = (Integer,     Integer)
                   -- ^ Param count, Base address
 
-data Address = VarAddr (Maybe Integer)
-             -- ^      Variable adress
-             | FunAddr Integer Integer
-             -- ^      PC      Return addr
-             deriving Show
+data Address m = VarAddr (Maybe (OperandAddr m))
+                 -- ^      Variable adress
+                 | FunAddr Integer Integer
+                 -- ^      PC      Return addr
+                 deriving Show
 
-type Context = M.Map String (PrimType, Address)
+type Context m = M.Map String (PrimType, Address m)
 
 data Sig = Sig String [(PrimType, String)] PrimType
 
-data Env = Env
+data Env m = Env
   { _sig :: Sig
-  , _contexts :: [Context] -- Essentially a stack
+  , _contexts :: [Context m] -- Essentially a stack
   }
 
 makeLenses ''Env
@@ -186,9 +199,12 @@ initProgram = Program Seq.empty
 addInstr :: Instruction -> Program -> Program
 addInstr instr p = p & unProgram %~ (instr <|)
 
+newtype Evm a = Evm { runEvm :: StateT CodegenState (Either CodegenError) a }
+  deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError, MonadFix)
+
 data CodegenState = CodegenState
   { _memPointer   :: !Integer
-  , _env          :: !Env
+  , _env          :: !(Env Evm)
   , _memory       :: !(M.Map Integer Size) -- Every memory cell is 32 bytes. If we allocate any of them, we do it with a size
   , _pc           :: !Integer
   , _funcRegistry :: !FuncRegistry
@@ -198,16 +214,13 @@ data CodegenState = CodegenState
 
 makeLenses ''CodegenState
 
-newtype Evm a = Evm { runEvm :: StateT CodegenState (Either CodegenError) a }
-  deriving (Functor, Applicative, Monad, MonadState CodegenState, MonadError CodegenError, MonadFix)
-
 type ScopeLevel = Int
 
 data VarsVar
 data VarsFun
 
-data VariableStatus a where
-  NotDeclared :: VariableStatus a
-  Decl        :: PrimType -> VariableStatus VarsVar
-  Def         :: PrimType -> Integer -> VariableStatus VarsVar
-  FunDef      :: PrimType -> Integer -> Integer -> VariableStatus VarsFun
+data VariableStatus context a where
+  NotDeclared :: VariableStatus context a
+  Decl        :: PrimType -> VariableStatus context VarsVar
+  Def         :: PrimType -> OperandAddr context -> VariableStatus context VarsVar
+  FunDef      :: PrimType -> Integer -> Integer -> VariableStatus context VarsFun

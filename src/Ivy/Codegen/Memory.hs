@@ -19,9 +19,17 @@ import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
 class MemoryM m where
-  storeAddressed
-    :: Integer -- Address of the value. Value should be loaded from this address
+  storeOnStack
+    :: OperandAddr m -- Address of the value. Value should be loaded from this address
     -> Integer -- Address to put value on
+    -> m ()
+  storeOnHeap
+    :: OperandAddr m
+    -> HeapAddress m
+    -> m ()
+  store
+    :: OperandAddr m
+    -> OperandAddr m
     -> m ()
   load
     :: Integer
@@ -33,8 +41,6 @@ class MemoryM m where
   alloc
     :: Size
     -> m Integer
-  store
-    :: m ()
   push
     :: Integer
     -> m ()
@@ -42,13 +48,25 @@ class MemoryM m where
     :: Integer
     -> Size
     -> m Integer
+  loadAddr
+    :: OperandAddr m
+    -> m ()
 
 instance MemoryM Evm where
-  storeAddressed valAddr destAddr = do
+  storeOnStack addr destAddr = do
     -- Initial state
-    load valAddr
+    loadAddr addr
     push32 destAddr
-    store
+    mstore
+
+  storeOnHeap addr (HeapAddress _ storer) = do
+    loadAddr addr
+    storer
+
+  store addr (OperandAddr destAddr) =
+    case destAddr of
+      Left stackAddr -> storeOnStack addr stackAddr
+      Right heapAddr -> storeOnHeap addr heapAddr
 
   load addr = do
     push32 addr
@@ -57,9 +75,6 @@ instance MemoryM Evm where
   storeVal val destAddr = do
     push32 val
     push32 destAddr
-    store
-
-  store =
     mstore
 
   alloc size = do
@@ -95,6 +110,9 @@ instance MemoryM Evm where
     let (startAddr, _) = head cellGroup
     forM_ [startAddr..(startAddr + len - 1)] $ \addr -> memory %= M.update (const (Just size)) addr
     pure (startAddr * 0x20)
+
+  loadAddr (OperandAddr (Left addr)) = load addr
+  loadAddr (OperandAddr (Right (HeapAddress loader _storer))) = loader
 
 totalMemBlockSize :: Integer
 totalMemBlockSize = 32 -- There are 32 bytes in a block
