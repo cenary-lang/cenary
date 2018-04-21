@@ -96,8 +96,8 @@ makeLenses ''Operand
 mkOperand :: forall f. PrimType -> Integer -> Operand f
 mkOperand ty addr = Operand ty (OperandAddr (Left addr))
 
-mkHeapOperand :: PrimType -> HeapAddress m -> Operand m
-mkHeapOperand ty loader = Operand ty (OperandAddr (Right loader))
+mkHeapOperand :: PrimType -> f () -> f () -> Operand f
+mkHeapOperand ty loader storer = Operand ty (OperandAddr (Right (HeapAddress loader storer)))
 
 instance Show CodegenError where
   show (VariableNotDeclared var details) = "Variable " <> var <> " is not declared. Details: " ++ show details

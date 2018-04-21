@@ -459,6 +459,12 @@ codegenExpr (EBinop binop expr1 expr2) = do
     _ -> throwError $ WrongOperandTypes ty1 ty2
   operation left right
 
+codegenExpr EDynArr =
+  let loader = pure ()
+      storer = pure ()
+  in
+    pure $ mkHeapOperand (TDynArr TInt) loader storer
+
 codegenExpr (EArr len elemExprs) = do
   elems <- mapM codegenExpr elemExprs
   elemTy <- testOperandsSameTy elems
