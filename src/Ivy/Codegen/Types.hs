@@ -165,7 +165,6 @@ type MemPointers = M.Map Size MemBlock
 data FuncRegistryArgInfo = FuncRegistryArgInfo
   { _argTy :: PrimType
   , _argName :: String
-  , _argAddr :: Integer
   }
 
 data FuncRegistry = FuncRegistry

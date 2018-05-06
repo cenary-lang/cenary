@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -99,6 +100,7 @@ executeBlock (Block stmts) = do
   mapM_ codegenStmt stmts
   popCtx
 
+-- | Going to be depreciated
 assign
   :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m)
   => PrimType
@@ -115,6 +117,27 @@ assign tyR name addr =
       checkTyEq name tyL tyR
       storeAddressed addr oldAddr
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
+
+assignFromStack
+  :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, OpcodeM m)
+  => PrimType
+  -> Name
+  -> m ()
+assignFromStack tyR name =
+  lookup name >>= \case
+    NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
+    Decl tyL -> do
+      checkTyEq name tyL tyR
+      addr <- alloc (sizeof tyR)
+      mload
+      push32 addr
+      mstore
+      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
+    Def tyL oldAddr -> do
+      checkTyEq name tyL tyR
+      mload
+      push32 oldAddr
+      store
 
 declVar
   :: (MonadState CodegenState m, ContextM m, MonadError CodegenError m, MemoryM m)
@@ -240,9 +263,9 @@ putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgI
 putFnArgsToContext = traverse_ register_arg
   where
     register_arg :: FuncRegistryArgInfo -> m ()
-    register_arg (FuncRegistryArgInfo ty name addr) = do
+    register_arg (FuncRegistryArgInfo ty name) = do
       declVar ty name
-      assign ty name addr
+      assignFromStack ty name
 
 resetMemory :: CodegenM m => m ()
 resetMemory = do
@@ -287,22 +310,29 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
       funPc <- jumpdest
 
+      -- Crete context in which function arguments and its local variables will live
+      createCtx
+
       -- Store parameters
       addressedArgs <- storeParameters
 
+      -- Put function arguments to newly created context
+      putFnArgsToContext (reverse addressedArgs)
+
       -- Function body
-      Operand retTy retAddr <- executeFunBlock addressedArgs block
+      Operand retTy retAddr <- executeFunBlock block
+
+      -- Pop the function's context
+      popCtx
+
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
   updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
   return ()
   where
-    executeFunBlock :: forall m. CodegenM m => [FuncRegistryArgInfo] -> Block -> m Operand
-    executeFunBlock addressedArgs (Block stmts) = do
-      createCtx
-      *> putFnArgsToContext addressedArgs
-      *> go stmts
-      <* popCtx
+    executeFunBlock :: forall m. CodegenM m => Block -> m Operand
+    executeFunBlock (Block stmts) =
+      go stmts
       where
         go :: [Stmt] -> m Operand
         go []             = throwError NoReturnStatement
@@ -312,7 +342,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
           branchIfElse (offset)
                        (load 0x00)
-                       (jump)
+                       (push32 addr >> swap1 >> jump)
                        (push32 (addr + 0x20) >> push32 addr >> op_return)
 
           return operand
@@ -342,7 +372,8 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       calldataload
       push32 argAddr
       mstore
-      pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName argAddr : registryInfo) -- TODO: ASSUMPTION: uint32
+      push32 argAddr
+      pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName : registryInfo) -- TODO: ASSUMPTION: uint32
 
 branchIf :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m ()
 branchIf offset loadPred ifComp = do
@@ -368,11 +399,6 @@ branchIfElse offset loadPred ifComp elseComp = do
 
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
-  FuncRegistry registryMap <- use funcRegistry
-  case M.lookup name registryMap of
-    Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
-    Just registryArgs -> write_func_args name registryArgs =<< mapM codegenExpr args
-
   lookupFun name >>= \case
     NotDeclared ->
       throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
@@ -380,22 +406,29 @@ codegenFunCall name args = do
       storeVal 0x01 0x00
       offset <- use funcOffset
       rec push32 (funcDest - offset)
+          push_func_args name
           push32 (funAddr - offset)
           jump
           funcDest <- jumpdest
       storeVal 0x00 0x00
       return (Operand retTy retAddr)
   where
-  write_func_args :: forall m. CodegenM m => String -> [FuncRegistryArgInfo] -> [Operand] -> m ()
-  write_func_args funcName registryArgs callerArgs = do
-    unless (length registryArgs == length callerArgs) $
-      throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
-    mapM_ bindArg (zip registryArgs callerArgs)
-      where
-        bindArg :: (FuncRegistryArgInfo, Operand) -> m ()
-        bindArg (FuncRegistryArgInfo registryTy registryName registryAddr, Operand callerTy callerAddr) = do
-          checkTyEq registryName registryTy callerTy
-          storeAddressed callerAddr registryAddr
+  push_func_args :: forall m. CodegenM m => String -> m ()
+  push_func_args funcName = do
+    FuncRegistry registryMap <- use funcRegistry
+    case M.lookup name registryMap of
+      Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
+      Just (reverse -> registryArgs) -> do
+        callerArgs <- mapM codegenExpr args
+        unless (length registryArgs == length callerArgs) $
+          throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
+        mapM_ bindArg (zip registryArgs callerArgs)
+          where
+            bindArg :: (FuncRegistryArgInfo, Operand) -> m ()
+            bindArg (FuncRegistryArgInfo registryTy registryName, Operand callerTy callerAddr) = do
+              checkTyEq registryName registryTy callerTy
+              push32 callerAddr
+              -- storeAddressed callerAddr registryAddr
 
 codegenExpr :: forall m. CodegenM m => Expr -> m Operand
 codegenExpr (EFunCall name args) =
