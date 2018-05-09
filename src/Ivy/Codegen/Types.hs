@@ -81,7 +81,6 @@ type Addr = Integer
 
 data Operand = Operand
   { _operandType :: PrimType
-  , _operandAddr :: Addr
   }
 
 makeLenses ''Operand
@@ -138,8 +137,8 @@ type ParamBaseAddrs = (Integer,     Integer)
 
 data Address = VarAddr (Maybe Integer)
              -- ^      Variable adress
-             | FunAddr Integer Integer
-             -- ^      PC      Return addr
+             | FunAddr Integer
+             -- ^      PC
              deriving Show
 
 type Context = M.Map String (PrimType, Address)
@@ -209,4 +208,4 @@ data VariableStatus a where
   NotDeclared :: VariableStatus a
   Decl        :: PrimType -> VariableStatus VarsVar
   Def         :: PrimType -> Integer -> VariableStatus VarsVar
-  FunDef      :: PrimType -> Integer -> Integer -> VariableStatus VarsFun
+  FunDef      :: PrimType -> Integer -> VariableStatus VarsFun

@@ -1,9 +1,16 @@
-pure int addvals(int x, int y) {
-  return x + y;
+int identity(int v) {
+  return v;
 }
 
-pure int wow() {
-  int a = addvals(1, 8);
-  int b = addvals(7, 4);
-  return a + b;
+int fib(int n) {
+  int a = 0;
+  int b = 1;
+  int sum = 0;
+  while (n > 1) {
+    sum = a + b;
+    a = b;
+    b = sum;
+    n = n - 1;
+  };
+  return sum;
 }

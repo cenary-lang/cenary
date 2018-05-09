@@ -60,7 +60,7 @@ term :: Parser Integer
 term = natural
 
 binary :: String -> Op -> Assoc -> Operator String () Identity Expr
-binary s opType = Infix (reservedOp s >> return (EBinop opType))
+binary s opType = Infix (whitespace >> reservedOp s >> whitespace >> return (EBinop opType))
 
 binops :: [[Operator String () Identity Expr]]
 binops = [ [ binary "*" OpMul AssocLeft

@@ -69,7 +69,7 @@ instance ContextM Evm where
         go [] = return NotDeclared
         go (ctx:xs) =
           case M.lookup name ctx of
-            Just (TFun retTy, FunAddr funAddr retAddr) -> return (FunDef retTy funAddr retAddr)
+            Just (TFun retTy, FunAddr funAddr) -> return (FunDef retTy funAddr)
             Just _ -> throwError $ InternalError $ "Another case for context (2)"
             Nothing -> go xs
   createCtx = env %= (contexts %~ (M.empty :))
@@ -84,15 +84,15 @@ instance TcM Evm where
   checkTyEq name tyL tyR =
     unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
-binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> Integer -> Integer -> m Operand
-binOp t op left right = do
-  load right
-  load left
+binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> m Operand
+binOp t op = do
+  -- We should have addresses of left and right operands, in this order by now.
   op
   addr <- alloc (sizeof t)
   push addr
   store
-  return (Operand t addr)
+  load addr
+  return (Operand t)
 
 executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
@@ -129,13 +129,11 @@ assignFromStack tyR name =
     Decl tyL -> do
       checkTyEq name tyL tyR
       addr <- alloc (sizeof tyR)
-      mload
       push32 addr
       mstore
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
     Def tyL oldAddr -> do
       checkTyEq name tyL tyR
-      mload
       push32 oldAddr
       store
 
@@ -153,10 +151,9 @@ declVar ty name =
 
 codegenStmt :: CodegenM m => Stmt -> m ()
 codegenStmt (SWhile pred block) = do
-  Operand predTy predAddr <- codegenExpr pred
+  Operand predTy <- codegenExpr pred
   checkTyEq "index_of_while_pred" TBool predTy
 
-  load predAddr
   iszero -- Reversing this bit because we jump to outside of while initally if predicate is false
 
   offset <- use funcOffset
@@ -173,9 +170,8 @@ codegenStmt (SWhile pred block) = do
       executeBlock block
 
       -- Load predicate again
-      Operand predTy' predAddr' <- codegenExpr pred
+      Operand predTy' <- codegenExpr pred
       checkTyEq "index_of_while_pred" TBool predTy'
-      load predAddr'
 
       -- Jump to destination back if target value is nonzero
       swap1
@@ -184,33 +180,33 @@ codegenStmt (SWhile pred block) = do
   pure ()
 
 codegenStmt (SAssignment name val) = do
-  Operand tyR addr <- codegenExpr val
-  assign tyR name addr
+  Operand tyR <- codegenExpr val
+  assignFromStack tyR name
 
-codegenStmt stmt@(SArrAssignment name index val) = do
-  Operand tyI iAddr <- codegenExpr index
-  checkTyEq ("index_of_" <> name) TInt tyI
-  Operand tyR addr <- codegenExpr val
-  lookup name >>= \case
-    NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
-    Decl _tyL -> throwError (NonInitializedArrayAccess name)
-    Def (TArray _length aTy) oldAddr -> do
-      checkTyEq name aTy tyR
+-- codegenStmt stmt@(SArrAssignment name index val) = do
+--   Operand tyI iAddr <- codegenExpr index
+--   checkTyEq ("index_of_" <> name) TInt tyI
+--   Operand tyR addr <- codegenExpr val
+--   lookup name >>= \case
+--     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
+--     Decl _tyL -> throwError (NonInitializedArrayAccess name)
+--     Def (TArray _length aTy) oldAddr -> do
+--       checkTyEq name aTy tyR
 
-      load addr
+--       load addr
 
-      load iAddr
-      push32 (sizeInt (sizeof aTy))
-      mul
-      push32 oldAddr
-      add
-      store
-    Def other _ ->
-        throwError
-      $ InternalError
-      $ "codegenStmt ArrAssignment: non-array type is in symbol table"
-      <> "as a definition for ArrAssignment code generation: "
-      <> show other
+--       load iAddr
+--       push32 (sizeInt (sizeof aTy))
+--       mul
+--       push32 oldAddr
+--       add
+--       store
+--     Def other _ ->
+--         throwError
+--       $ InternalError
+--       $ "codegenStmt ArrAssignment: non-array type is in symbol table"
+--       <> "as a definition for ArrAssignment code generation: "
+--       <> show other
 
 codegenStmt (SVarDecl ty name) =
   declVar ty name
@@ -220,21 +216,21 @@ codegenStmt (SDeclAndAssignment ty name val) = do
   codegenStmt (SAssignment name val)
 
 codegenStmt (SIf ePred bodyBlock) = do
-  Operand tyPred addrPred <- codegenExpr ePred
+  Operand tyPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
   offset <- use funcOffset
   -- Loving this syntax style, should switch to lisp maybe
   branchIf
     (offset)
-    (load addrPred)
+    (mload)
     (void (executeBlock bodyBlock))
   pure ()
 
 codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
-  Operand tyPred addrPred <- codegenExpr ePred
+  Operand tyPred <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
-  load addrPred
+  mload
   iszero -- Negate for jumping condition
   rec
       push32 trueDest
@@ -319,15 +315,15 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       -- Put function arguments to newly created context
       putFnArgsToContext (reverse addressedArgs)
 
-      -- Function body
-      Operand retTy retAddr <- executeFunBlock block
+      -- Function body (function bodies leave an element on stack, which is the address of the return value)
+      Operand retTy <- executeFunBlock block
 
       -- Pop the function's context
       popCtx
 
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
-  updateCtx (M.insert name (TFun retTy, FunAddr funPc retAddr))
+  updateCtx (M.insert name (TFun retTy, FunAddr funPc))
   return ()
   where
     executeFunBlock :: forall m. CodegenM m => Block -> m Operand
@@ -337,13 +333,24 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
         go :: [Stmt] -> m Operand
         go []             = throwError NoReturnStatement
         go [SReturn expr] = do
-          operand@(Operand _ty addr) <- codegenExpr expr
+          operand@(Operand _ty) <- codegenExpr expr
           offset <- use funcOffset
 
+          let internalCall = do
+                swap1
+                jump
+              externalCall = do
+                addr <- alloc (sizeof TInt)
+                push32 addr
+                mstore
+                push32 (addr + 0x20)
+                push32 addr
+                op_return
+                
           branchIfElse (offset)
                        (load 0x00)
-                       (push32 addr >> swap1 >> jump)
-                       (push32 (addr + 0x20) >> push32 addr >> op_return)
+                       (internalCall)
+                       (externalCall)
 
           return operand
         go (stmt:xs)      = codegenStmt stmt >> go xs
@@ -370,9 +377,9 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       -- Fill arg addresses with incoming values from the call
       push32 calldataOffset
       calldataload
+      dup1
       push32 argAddr
       mstore
-      push32 argAddr
       pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName : registryInfo) -- TODO: ASSUMPTION: uint32
 
 branchIf :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m ()
@@ -402,7 +409,7 @@ codegenFunCall name args = do
   lookupFun name >>= \case
     NotDeclared ->
       throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
-    FunDef retTy funAddr retAddr -> do
+    FunDef retTy funAddr -> do
       storeVal 0x01 0x00
       offset <- use funcOffset
       rec push32 (funcDest - offset)
@@ -411,7 +418,8 @@ codegenFunCall name args = do
           jump
           funcDest <- jumpdest
       storeVal 0x00 0x00
-      return (Operand retTy retAddr)
+      -- We already have function's return address on top of the stack here.
+      return (Operand retTy)
   where
   push_func_args :: forall m. CodegenM m => String -> m ()
   push_func_args funcName = do
@@ -420,15 +428,17 @@ codegenFunCall name args = do
       Nothing -> throwError (VariableNotDeclared name (TextDetails "Function not declared"))
       Just (reverse -> registryArgs) -> do
         callerArgs <- mapM codegenExpr args
+
+        -- Caller and function arg length check
         unless (length registryArgs == length callerArgs) $
           throwError (FuncArgLengthMismatch funcName (length registryArgs) (length callerArgs))
-        mapM_ bindArg (zip registryArgs callerArgs)
+
+        -- Type check on function arguments
+        mapM_ tyCheckFuncArg (zip registryArgs callerArgs)
           where
-            bindArg :: (FuncRegistryArgInfo, Operand) -> m ()
-            bindArg (FuncRegistryArgInfo registryTy registryName, Operand callerTy callerAddr) = do
+            tyCheckFuncArg :: (FuncRegistryArgInfo, Operand) -> m ()
+            tyCheckFuncArg (FuncRegistryArgInfo registryTy registryName, Operand callerTy) = do
               checkTyEq registryName registryTy callerTy
-              push32 callerAddr
-              -- storeAddressed callerAddr registryAddr
 
 codegenExpr :: forall m. CodegenM m => Expr -> m Operand
 codegenExpr (EFunCall name args) =
@@ -438,36 +448,41 @@ codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     Decl _ -> throwError (VariableNotDefined name)
-    Def ty addr -> return (Operand ty addr)
+    Def ty addr -> do
+      load addr
+      return (Operand ty)
 
-codegenExpr (EArrIdentifier name index) =
-  lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name (TextDetails "in array assignment"))
-    Decl _ -> throwError (VariableNotDefined name)
-    Def (TArray _ ty) addr -> do
-      Operand indexTy _ <- codegenExpr index
-      checkTyEq name TInt indexTy
-      return (Operand ty addr)
-    Def ty _ -> throwError (IllegalArrAccess name ty)
+-- codegenExpr (EArrIdentifier name index) =
+--   lookup name >>= \case
+--     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "in array assignment"))
+--     Decl _ -> throwError (VariableNotDefined name)
+--     Def (TArray _ ty) addr -> do
+--       Operand indexTy _ <- codegenExpr index
+--       checkTyEq name TInt indexTy
+--       return (Operand ty addr)
+--     Def ty _ -> throwError (IllegalArrAccess name ty)
 
 codegenExpr (EInt val) = do
   addr <- alloc (sizeof TInt)
   storeVal val addr
-  return (Operand TInt addr)
+  load addr
+  return (Operand TInt)
 
 codegenExpr (EChar val) = do
   addr <- alloc (sizeof TChar)
   storeVal (fromIntegral (ord val)) addr
-  return (Operand TChar addr)
+  load addr
+  return (Operand TChar)
 
 codegenExpr (EBool val) = do
   addr <- alloc (sizeof TBool)
   storeVal (boolToInt val) addr
-  return (Operand TBool addr)
+  load addr
+  return (Operand TBool)
 
 codegenExpr (EBinop binop expr1 expr2) = do
-  Operand ty1 left <- codegenExpr expr1
-  Operand ty2 right <- codegenExpr expr2
+  Operand ty2 <- codegenExpr expr2
+  Operand ty1 <- codegenExpr expr1
   operation <- case (ty1, ty2) of
     (TInt, TInt) -> pure $
       case binop of
@@ -480,25 +495,26 @@ codegenExpr (EBinop binop expr1 expr2) = do
         OpLt  -> binOp TBool lt
         OpEq  -> binOp TBool eq
     _ -> throwError $ WrongOperandTypes ty1 ty2
-  operation left right
+  operation
 
-codegenExpr (EArray len elemExprs) = do
-  elems <- mapM codegenExpr elemExprs
-  elemTy <- testOperandsSameTy elems
-  addr <- allocBulk len (sizeof elemTy)
-  return (Operand (TArray len elemTy) addr)
-  where
-    testOperandsSameTy :: [Operand] -> m PrimType
-    testOperandsSameTy [] = throwError EmptyArrayValue
-    testOperandsSameTy (x:xs) =
-      testOperandsHasTy (x ^. operandType) xs
+-- codegenExpr (EArray len elemExprs) = do
+--   elems <- mapM codegenExpr elemExprs
+--   elemTy <- testOperandsSameTy elems
+--   addr <- allocBulk len (sizeof elemTy)
+--   push32 addr
+--   return (Operand (TArray len elemTy))
+--   where
+--     testOperandsSameTy :: [Operand] -> m PrimType
+--     testOperandsSameTy [] = throwError EmptyArrayValue
+--     testOperandsSameTy (x:xs) =
+--       testOperandsHasTy (x ^. operandType) xs
 
-    testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
-    testOperandsHasTy ty [] = return ty
-    testOperandsHasTy ty (x:xs) =
-      if x ^. operandType == ty
-        then testOperandsHasTy ty xs
-        else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
+--     testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
+--     testOperandsHasTy ty [] = return ty
+--     testOperandsHasTy ty (x:xs) =
+--       if x ^. operandType == ty
+--         then testOperandsHasTy ty xs
+--         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
 
 codegenPhases :: CodegenM m => [FunStmt] -> m ()
 codegenPhases functions = do

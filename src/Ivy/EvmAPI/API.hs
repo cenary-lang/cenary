@@ -37,6 +37,7 @@ module Ivy.EvmAPI.API
   , push4
   , push32
   , generateByteCode
+  , inc
   ) where
 
 import           Control.Lens hiding (op)
@@ -151,3 +152,6 @@ generateByteCode (Program instructions) =
                   PUSH4 val -> printf "%08x" val
                   PUSH1 val -> printf "%02x" val
                   _          -> ""
+
+inc :: OpcodeM m => Integer -> m ()
+inc val = push32 val >> add
