@@ -1,27 +1,16 @@
-pure int addvals(int x, int y) {
-  return x + y;
-}
-
-int identity(int k) {
-  return k;
-}
-
-char myid(char k) {
-  return k;
+int identity(int v) {
+  return v;
 }
 
 int fib(int n) {
   int a = 0;
   int b = 1;
-  int sum = 6;
+  int sum = 0;
   while (n > 1) {
-    sum = addvals(a, b);
+    sum = a + b;
     a = b;
     b = sum;
     n = n - 1;
-  };
-  if(false) {
-    sum = sum + 10;
   };
   return sum;
 }
