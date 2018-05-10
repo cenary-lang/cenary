@@ -1,0 +1,14 @@
+bool even(int a) {
+  return a % 2 == 0;
+}
+
+int main() {
+  int v = 3;
+  int result = 0;
+  if(even(v)) {
+    result = 1;
+  } else {
+    result = 5;
+  };
+  return result;
+}

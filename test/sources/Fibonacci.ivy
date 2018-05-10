@@ -1,7 +1,3 @@
-int identity(int v) {
-  return v;
-}
-
 int fib(int n) {
   int a = 0;
   int b = 1;
@@ -12,4 +8,5 @@ int fib(int n) {
     b = sum;
     n = n - 1;
   };
+  return sum;
 }

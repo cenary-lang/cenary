@@ -13,39 +13,94 @@ function disasm {
 }
 
 function ast {
-  $EXECUTABLE -m ast -i stdlib.ivy
+  $EXECUTABLE -m ast -i "${1:-stdlib.ivy}"
 }
 
 function bytecode {
-  $EXECUTABLE -m bytecode -i stdlib.ivy
+  $EXECUTABLE -m bytecode -i "${1:-stdlib.ivy}"
 }
 
 function run {
-  $EXECUTABLE -m run -i stdlib.ivy
+  $EXECUTABLE -m run -i "${1:-stdlib.ivy}"
 }
 
 function asm {
-  $EXECUTABLE -m asm -i in.evm
+  $EXECUTABLE -m asm -i "${1:-in.evm}"
 }
 
 function deploy {
-  $EXECUTABLE -m deploy -i stdlib.ivy
+  $EXECUTABLE -m deploy -i "${1:-stdlib.ivy}"
 }
 
 function rewind-deploy {
-  $EXECUTABLE -m rewind-deploy -i stdlib.ivy
+  $EXECUTABLE -m rewind-deploy -i "${1:-stdlib.ivy}"
 }
 
 function compute {
+  DEPLOYMENT_JS=deployment/deployment.current.js
   compile true
-  deploy
+  deploy $1
   if ! [[ "$?" = 0 ]]; then
     echo "[!] Compilation did not succeed."
     exit 1
   else
-    node deployment/deployment.current.js
-    rewind-deploy
+    if [[ $2 ]]; then
+      sed -i '' s/@call@/"$2"/ "$DEPLOYMENT_JS"
+    fi
+    node "$DEPLOYMENT_JS"
+    rewind-deploy $1
   fi
+}
+
+function blue {
+  echo -e "\e[34m$1\033[0m"
+}
+
+function green {
+  echo -e "\e[32m$1\033[0m"
+}
+
+function red {
+  echo -e "\e[31m$1\033[0m"
+}
+
+# TODO: Tidy up here when you actually learn bash
+function test {
+  if ! [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
+    start_testrpc
+  fi
+  ASSERTIONS=( Id.ivy "3" "id(3)"
+               Fibonacci.ivy "610" "fib(15)"
+               Adder.ivy "10" "add(3, 7)"
+               Adder.ivy "3" "add(1, 2)"
+               Branching.ivy "5" "main()"
+             )
+  for i in {0..14..3}; do
+    filename="${ASSERTIONS[$i]}"
+    assertion_text="${ASSERTIONS[$i + 1]}"
+    function_call="${ASSERTIONS[$i + 2]}"
+    blue "Testing file $filename"
+    output=$(compute ./test/sources/"$filename" "$function_call" 2>&1)
+    if echo $output | grep -q "$assertion_text"; then
+      green "OK"
+    else
+      red "NOT OK"
+      blue "Output: "
+      red "$output"
+    fi
+  done
+
+  if [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
+    kill_testrpc
+  fi
+}
+
+function start_testrpc {
+  testrpc 1>/dev/null &
+}
+
+function kill_testrpc {
+  ps aux|grep testrpc|grep node|awk '{print $2}'|xargs kill -9
 }
 
 case $1 in
@@ -78,6 +133,9 @@ rewind-deploy)
   ;;
 compute)
   compute
+  ;;
+test)
+  test
   ;;
 *)
   compile
