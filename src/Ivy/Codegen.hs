@@ -219,10 +219,11 @@ codegenStmt (SIf ePred bodyBlock) = do
   Operand tyPred <- codegenExpr ePred
   checkTyEq "if_expr" tyPred TBool
   offset <- use funcOffset
+
   -- Loving this syntax style, should switch to lisp maybe
   branchIf
     (offset)
-    (mload)
+    (pure ())
     (void (executeBlock bodyBlock))
   pure ()
 
@@ -230,21 +231,11 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
   Operand tyPred <- codegenExpr ePred
   checkTyEq "if_else_expr" tyPred TBool
 
-  mload
-  iszero -- Negate for jumping condition
-  rec
-      push32 trueDest
-      jumpi
-
-      executeBlock trueBlock
-
-      push32 falseDest
-      jump
-
-      trueDest <- jumpdest
-      executeBlock falseBlock
-      falseDest <- jumpdest
-  pure ()
+  offset <- use funcOffset
+  branchIfElse (offset)
+               (pure ())
+               (executeBlock trueBlock)
+               (executeBlock falseBlock)
 
 codegenStmt (SReturn retExpr) =
   void (codegenExpr retExpr)
@@ -399,6 +390,7 @@ branchIfElse offset loadPred ifComp elseComp = do
       jumpi
       elseComp
       push32 (branchEnd - offset)
+      jump
       elseEndIfBegin <- jumpdest
       ifComp
       branchEnd <- jumpdest
@@ -463,21 +455,15 @@ codegenExpr expr@(EIdentifier name) =
 --     Def ty _ -> throwError (IllegalArrAccess name ty)
 
 codegenExpr (EInt val) = do
-  addr <- alloc (sizeof TInt)
-  storeVal val addr
-  load addr
+  push32 val
   return (Operand TInt)
 
-codegenExpr (EChar val) = do
-  addr <- alloc (sizeof TChar)
-  storeVal (fromIntegral (ord val)) addr
-  load addr
+codegenExpr (EChar (fromIntegral . ord -> val)) = do
+  push32 val
   return (Operand TChar)
 
-codegenExpr (EBool val) = do
-  addr <- alloc (sizeof TBool)
-  storeVal (boolToInt val) addr
-  load addr
+codegenExpr (EBool (boolToInt -> val)) = do
+  push32 val
   return (Operand TBool)
 
 codegenExpr (EBinop binop expr1 expr2) = do

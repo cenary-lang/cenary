@@ -1,16 +1,13 @@
-int identity(int v) {
-  return v;
+bool even(int a) {
+  return a % 2 == 0;
 }
 
-int fib(int n) {
-  int a = 0;
-  int b = 1;
-  int sum = 0;
-  while (n > 1) {
-    sum = a + b;
-    a = b;
-    b = sum;
-    n = n - 1;
+int main(int a) {
+  int result = 0;
+  if(even(a)) {
+    result = 4;
+  } else {
+    result = 5;
   };
-  return sum;
+  return result;
 }
