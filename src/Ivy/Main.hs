@@ -74,8 +74,7 @@ initEnv _userAddr = Env
 initCodegenState :: CodegenState
 initCodegenState =
   CodegenState
-    { _memPointer = 0
-    , _memory           = initMemory
+    { _stackMemEnd      = 0
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
     , _funcRegistry     = FuncRegistry M.empty

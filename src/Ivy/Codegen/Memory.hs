@@ -38,10 +38,6 @@ class MemoryM m where
   push
     :: Integer
     -> m ()
-  allocBulk
-    :: Integer
-    -> Size
-    -> m Integer
 
 instance MemoryM Evm where
   storeAddressed valAddr destAddr = do
@@ -62,39 +58,11 @@ instance MemoryM Evm where
   store =
     mstore
 
-  alloc size = do
-    pointer <- use memPointer
-    mem <- use memory
-    let (Just addr) = flip find [pointer..] $ \ix ->
-          case M.lookup ix mem of
-            Nothing -> True
-            Just _  -> False
-    memory %= M.insert addr size
-    memPointer .= addr
-    pure (addr * 0x20)
+  alloc size =
+    stackMemEnd <<+= (sizeInt size)
 
   push val =
     push32 val -- OPTIMIZE: different PUSH variants can be used for this task
-
-  allocBulk len size = do
-    pointer <- use memPointer
-    mem <- use memory
-    let group_existence :: [[(Integer, Maybe Size)]] =
-          groupBy ((==) `on` snd)
-          $ map (\ix -> (ix, M.lookup ix mem))
-          $ [pointer..]
-    let (Just cellGroup) = flip find group_existence $ \cells ->
-          case take (fromIntegral len) cells of
-            [] -> False
-            ((_, Just _):_) -> False -- These are filled cells
-            suitable ->
-              if fromIntegral (length suitable) >= len
-                 then True
-                 else False
-
-    let (startAddr, _) = head cellGroup
-    forM_ [startAddr..(startAddr + len - 1)] $ \addr -> memory %= M.update (const (Just size)) addr
-    pure (startAddr * 0x20)
 
 totalMemBlockSize :: Integer
 totalMemBlockSize = 32 -- There are 32 bytes in a block
@@ -148,8 +116,9 @@ And the iterative process:
 
 -}
 sizeInt :: Size -> Integer
-sizeInt Size_1  = 1
-sizeInt Size_2  = 2
-sizeInt Size_4  = 4
-sizeInt Size_8  = 8
-sizeInt Size_32 = 32
+sizeInt _ = 0x20 -- TODO: Keep this until we have distinct sizes
+-- sizeInt Size_1  = 1
+-- sizeInt Size_2  = 2
+-- sizeInt Size_4  = 4
+-- sizeInt Size_8  = 8
+-- sizeInt Size_32 = 32

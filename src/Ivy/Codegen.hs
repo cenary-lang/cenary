@@ -24,6 +24,7 @@ import           Data.Foldable (traverse_)
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
+import           Data.Foldable (for_)
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
@@ -99,24 +100,6 @@ executeBlock (Block stmts) = do
   createCtx
   mapM_ codegenStmt stmts
   popCtx
-
--- | Going to be depreciated
-assign
-  :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m)
-  => PrimType
-  -> Name
-  -> Integer
-  -> m ()
-assign tyR name addr =
-  lookup name >>= \case
-    NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
-    Decl tyL -> do
-      checkTyEq name tyL tyR
-      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
-    Def tyL oldAddr -> do
-      checkTyEq name tyL tyR
-      storeAddressed addr oldAddr
-      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
 
 assignFromStack
   :: (MonadError CodegenError m, ContextM m, TcM m, MemoryM m, OpcodeM m)
@@ -254,11 +237,6 @@ putFnArgsToContext = traverse_ register_arg
       declVar ty name
       assignFromStack ty name
 
-resetMemory :: CodegenM m => m ()
-resetMemory = do
-  memory .= initMemory
-  memPointer .= 0
-
 sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m b
 sigToKeccak256 (FunSig _ name args) = do
   argRep <- show_args
@@ -279,7 +257,6 @@ sigToKeccak256 (FunSig _ name args) = do
 codegenFunDef :: CodegenM m => FunStmt -> m ()
 codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
   fnNameHash <- sigToKeccak256 signature
-  -- resetMemory -- TODO: remove this after we get persistence
   rec
       -- Function's case statement. If name does not match, we don't enter to this function.
       offset <- use funcOffset
@@ -444,15 +421,21 @@ codegenExpr expr@(EIdentifier name) =
       load addr
       return (Operand ty)
 
--- codegenExpr (EArrIdentifier name index) =
---   lookup name >>= \case
---     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "in array assignment"))
---     Decl _ -> throwError (VariableNotDefined name)
---     Def (TArray _ ty) addr -> do
---       Operand indexTy _ <- codegenExpr index
---       checkTyEq name TInt indexTy
---       return (Operand ty addr)
---     Def ty _ -> throwError (IllegalArrAccess name ty)
+codegenExpr (EArrIdentifier name index) =
+  lookup name >>= \case
+    NotDeclared ->
+      throwError (VariableNotDeclared name (TextDetails "in array assignment"))
+    Decl _ ->
+      throwError (VariableNotDefined name)
+    Def (TArray _ ty) addr -> do
+      Operand indexTy <- codegenExpr index
+      checkTyEq name TInt indexTy
+      push32 0x20
+      mul
+      inc addr
+      mload
+      return (Operand ty)
+    Def ty _ -> throwError (IllegalArrAccess name ty)
 
 codegenExpr (EInt val) = do
   push32 val
@@ -486,8 +469,15 @@ codegenExpr (EBinop binop expr1 expr2) = do
 -- codegenExpr (EArray len elemExprs) = do
 --   elems <- mapM codegenExpr elemExprs
 --   elemTy <- testOperandsSameTy elems
---   addr <- allocBulk len (sizeof elemTy)
---   push32 addr
+--   beginAddr <- allocBulk len (sizeof elemTy)
+
+--   -- Store parameters at their respective stack addresses
+--   let size = sizeInt (sizeof elemTy)
+--   let endAddr = beginAddr + size * (len-1)
+--   for_ [endAddr,endAddr-size..beginAddr] $ \addr -> do
+--     push32 addr
+--     mstore
+
 --   return (Operand (TArray len elemTy))
 --   where
 --     testOperandsSameTy :: [Operand] -> m PrimType
