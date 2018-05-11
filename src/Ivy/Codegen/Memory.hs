@@ -31,8 +31,7 @@ class (Functor m, Applicative m, Monad m) => MemoryM m where
     -> Integer -- Address to put value on
     -> m ()
   alloc
-    :: Size
-    -> m Integer
+    :: m Integer
   store
     :: m ()
   push
@@ -58,8 +57,8 @@ instance MemoryM Evm where
   store =
     mstore
 
-  alloc size =
-    stackMemEnd <<+= (sizeInt size)
+  alloc =
+    stackMemEnd <<+= 0x20
 
   push val =
     push32 val -- OPTIMIZE: different PUSH variants can be used for this task

@@ -185,12 +185,13 @@ addInstr :: Instruction -> Program -> Program
 addInstr instr p = p & unProgram %~ (instr <|)
 
 data CodegenState = CodegenState
-  { _env          :: !Env
-  , _stackMemEnd  :: Integer
-  , _pc           :: !Integer
-  , _funcRegistry :: !FuncRegistry
-  , _program      :: Program
-  , _funcOffset   :: !Integer
+  { _env            :: !Env
+  , _heapSpaceBegin :: Integer -- Dis boi should stay lazy or bad things happen
+  , _stackMemEnd    :: !Integer
+  , _pc             :: !Integer
+  , _funcRegistry   :: !FuncRegistry
+  , _program        :: Program
+  , _funcOffset     :: !Integer
   }
 
 makeLenses ''CodegenState

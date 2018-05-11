@@ -24,7 +24,6 @@ import           Data.Foldable (traverse_)
 import           Data.List (intercalate)
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
-import           Data.Foldable (for_)
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
@@ -90,7 +89,7 @@ binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> m Operand
 binOp t op = do
   -- We should have addresses of left and right operands, in this order by now.
   op
-  addr <- alloc (sizeof t)
+  addr <- alloc
   push addr
   store
   load addr
@@ -112,7 +111,7 @@ assignFromStack tyR name =
     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
     Decl tyL -> do
       checkTyEq name tyL tyR
-      addr <- alloc (sizeof tyR)
+      addr <- alloc
       push32 addr
       mstore
       updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
@@ -309,7 +308,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
                 swap1
                 jump
               externalCall = do
-                addr <- alloc (sizeof TInt)
+                addr <- alloc
                 push32 addr
                 mstore
                 push32 (addr + 0x20)
@@ -342,7 +341,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
     storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
     storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
-      argAddr <- alloc (sizeof argTy)
+      argAddr <- alloc
       -- Fill arg addresses with incoming values from the call
       push32 calldataOffset
       calldataload
@@ -422,19 +421,39 @@ codegenExpr expr@(EIdentifier name) =
       load addr
       return (Operand ty)
 
-codegenExpr (EArrIdentifier name index) =
+codegenExpr (EArrIdentifier name index) = do
+  offset <- use funcOffset
   lookup name >>= \case
     NotDeclared ->
       throwError (VariableNotDeclared name (TextDetails "in array assignment"))
     Decl _ ->
       throwError (VariableNotDefined name)
-    Def (TArray _ ty) addr -> do
+    Def (TArray ty) addr -> do
       Operand indexTy <- codegenExpr index
+      -- a[2]
       checkTyEq name TInt indexTy
+
+      push32 addr
+      mload -- [2, 160]
+
+      -- Runtime check for array bounds
+      dup2 -- [2, 160, 2]
+      dup2 -- [2, 160, 2, 160]
+      mload -- [2, 160, 2, 1]
+      branchIf
+        offset
+        (push32 0x01 >> swap1 >> sub >> lt)
+        (stop)
+
+      -- [2, 160]
+      -- Get value at index
+      inc 0x20
+      swap1
       push32 0x20
       mul
-      inc addr
+      add
       mload
+
       return (Operand ty)
     Def ty _ -> throwError (IllegalArrAccess name ty)
 
@@ -467,31 +486,55 @@ codegenExpr (EBinop binop expr1 expr2) = do
     _ -> throwError $ WrongOperandTypes ty1 ty2
   operation
 
--- codegenExpr (EArray len elemExprs) = do
---   elems <- mapM codegenExpr elemExprs
---   elemTy <- testOperandsSameTy elems
---   beginAddr <- allocBulk len (sizeof elemTy)
+-- int[] a;
+-- a = {1, 2, 3, 4};
+codegenExpr (EArray elemExprs) = do
+  elems <- mapM codegenExpr (reverse elemExprs)
+  elemTy <- testOperandsSameTy elems
+  arrAddr <- alloc
 
---   -- Store parameters at their respective stack addresses
---   let size = sizeInt (sizeof elemTy)
---   let endAddr = beginAddr + size * (len-1)
---   for_ [endAddr,endAddr-size..beginAddr] $ \addr -> do
---     push32 addr
---     mstore
+  heapBegin <- use heapSpaceBegin
+  push32 heapBegin -- [3, 2, 1, 360]
+  mload -- [3, 2, 1, 420]
 
---   return (Operand (TArray len elemTy))
---   where
---     testOperandsSameTy :: [Operand] -> m PrimType
---     testOperandsSameTy [] = throwError EmptyArrayValue
---     testOperandsSameTy (x:xs) =
---       testOperandsHasTy (x ^. operandType) xs
+  -- ** Tell its new address to our newly created array
+  push32 arrAddr -- [3, 2, 1, 420, 40]
+  dup2 -- [3, 2, 1, 420, 40, 420]
+  swap1 -- [3, 2, 1, 420, 420, 40]
+  mstore -- [3, 2, 1, 420]
 
---     testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
---     testOperandsHasTy ty [] = return ty
---     testOperandsHasTy ty (x:xs) =
---       if x ^. operandType == ty
---         then testOperandsHasTy ty xs
---         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
+  -- ** Actually store the elements
+  dup1 -- [3, 2, 1, 420, 420]
+  push32 (fromIntegral (length elemExprs)) -- [3, 2, 1, 420, 420, 3]
+  swap1 -- [3, 2, 1, 420, 3, 420]
+  mstore -- [3, 2, 1, 420]
+  inc 0x20 -- [3, 2, 1, 440]
+  replicateM (length elemExprs) $ do
+    swap1 -- [3, 2, 440, 1]
+    dup2 -- [3, 2, 440, 1, 440]
+    mstore -- [3, 2, 440]
+    inc 0x20 -- [3, 2, 460]
+  -- [500]
+
+  -- Update the heap end
+  push32 heapBegin -- [500, 360]
+  mstore -- []
+
+  push32 arrAddr
+  mload
+  return (Operand (TArray elemTy))
+  where
+    testOperandsSameTy :: [Operand] -> m PrimType
+    testOperandsSameTy [] = throwError EmptyArrayValue
+    testOperandsSameTy (x:xs) =
+      testOperandsHasTy (x ^. operandType) xs
+
+    testOperandsHasTy :: PrimType -> [Operand] -> m PrimType
+    testOperandsHasTy ty [] = return ty
+    testOperandsHasTy ty (x:xs) =
+      if x ^. operandType == ty
+        then testOperandsHasTy ty xs
+        else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
 
 codegenPhases :: CodegenM m => [FunStmt] -> m ()
 codegenPhases functions = do
@@ -523,5 +566,11 @@ bodyPhase stmts = do
   -- We use first 32 bytes (between 0x00 and 0x20) to determine 
   -- whether a function is called internally or from outside
   allocRegisters
-
-  traverse_ codegenFunDef stmts
+  rec
+      heapSpaceBegin .= heapSpaceBegin'
+      push32 (heapSpaceBegin' + 0x20)
+      push32 heapSpaceBegin'
+      mstore
+      traverse_ codegenFunDef stmts
+      heapSpaceBegin' <- use stackMemEnd
+  pure ()
