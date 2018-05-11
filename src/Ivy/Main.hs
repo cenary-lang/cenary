@@ -23,7 +23,6 @@ import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
 import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
-import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
                                     initProgram, runEvm, FuncRegistry (..))
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,

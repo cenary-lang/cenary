@@ -58,7 +58,8 @@ library
     Evm.Abi,
     Ivy.Deployment,
     Ivy.AbiBridge,
-    Ivy.Error
+    Ivy.Error,
+    Ivy.Register
 
 test-suite tests
     type:             exitcode-stdio-1.0

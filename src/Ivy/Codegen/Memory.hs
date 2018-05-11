@@ -18,7 +18,7 @@ import           Ivy.EvmAPI.API
 import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
-class MemoryM m where
+class (Functor m, Applicative m, Monad m) => MemoryM m where
   storeAddressed
     :: Integer -- Address of the value. Value should be loaded from this address
     -> Integer -- Address to put value on

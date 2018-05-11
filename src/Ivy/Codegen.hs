@@ -34,6 +34,7 @@ import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.API
 import           Ivy.Syntax
+import           Ivy.Register
 --------------------------------------------------------------------------------
 
 -- | Class of monads that are able to read and update context
@@ -316,7 +317,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
                 op_return
                 
           branchIfElse (offset)
-                       (load 0x00)
+                       (loadReg Reg_FunCall)
                        (internalCall)
                        (externalCall)
 
@@ -329,7 +330,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
     storeParameters :: forall m. CodegenM m => m [FuncRegistryArgInfo]
     storeParameters = do
       offset <- use funcOffset
-      rec load 0x00
+      rec loadReg Reg_FunCall
           push32 (fillingEnd - offset)
           jumpi
 
@@ -379,14 +380,14 @@ codegenFunCall name args = do
     NotDeclared ->
       throwError (VariableNotDeclared name (ExprDetails (EFunCall name args)))
     FunDef retTy funAddr -> do
-      storeVal 0x01 0x00
+      storeRegVal Reg_FunCall 0x01
       offset <- use funcOffset
       rec push32 (funcDest - offset)
           push_func_args name
           push32 (funAddr - offset)
           jump
           funcDest <- jumpdest
-      storeVal 0x00 0x00
+      storeRegVal Reg_FunCall 0x00
       -- We already have function's return address on top of the stack here.
       return (Operand retTy)
   where
@@ -521,6 +522,6 @@ bodyPhase
 bodyPhase stmts = do
   -- We use first 32 bytes (between 0x00 and 0x20) to determine 
   -- whether a function is called internally or from outside
-  _ <- alloc (sizeof TInt)
+  allocRegisters
 
   traverse_ codegenFunDef stmts
