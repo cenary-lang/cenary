@@ -73,9 +73,10 @@ function test {
                Fibonacci.ivy "610" "fib(15)"
                Adder.ivy "10" "add(3, 7)"
                Adder.ivy "3" "add(1, 2)"
-               Branching.ivy "5" "main()"
+               Branching.ivy "3" "main(4)"
+               Branching.ivy "6" "main(5)"
              )
-  for i in {0..14..3}; do
+  for i in {0..17..3}; do
     filename="${ASSERTIONS[$i]}"
     assertion_text="${ASSERTIONS[$i + 1]}"
     function_call="${ASSERTIONS[$i + 2]}"
@@ -83,6 +84,8 @@ function test {
     output=$(compute ./test/sources/"$filename" "$function_call" 2>&1)
     if echo $output | grep -q "$assertion_text"; then
       green "OK"
+      blue "Output: "
+      green "$output"
     else
       red "NOT OK"
       blue "Output: "

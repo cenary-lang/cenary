@@ -2,13 +2,12 @@ bool even(int a) {
   return a % 2 == 0;
 }
 
-int main() {
-  int v = 3;
+int main(int a) {
   int result = 0;
-  if(even(v)) {
-    result = 1;
+  if(even(a)) {
+    result = 3;
   } else {
-    result = 5;
+    result = 6;
   };
   return result;
 }

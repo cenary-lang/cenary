@@ -41,12 +41,12 @@ primBool =
 primString :: Parser Expr
 primString = do
   str <- map EChar <$> stringLiteral
-  return (EArray (toInteger (length str)) str)
+  return (EArray str)
 
 eArray :: Parser Expr
 eArray = do
   elems <- curlied (commaSep ePrim)
-  return (EArray (toInteger (length elems)) elems)
+  return (EArray elems)
 
 ePrim :: Parser Expr
 ePrim = try primInt
@@ -120,9 +120,8 @@ tyArray :: Parser PrimType
 tyArray = do
   type' <- typeAnnot
   char' '['
-  size <- integer
   char' ']'
-  return (TArray size type')
+  return (TArray type')
 
 typedIdentifier :: Parser (PrimType, Name)
 typedIdentifier = do

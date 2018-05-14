@@ -23,7 +23,6 @@ import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
 import qualified Ivy.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
-import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
                                     initProgram, runEvm, FuncRegistry (..))
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,
@@ -74,8 +73,8 @@ initEnv _userAddr = Env
 initCodegenState :: CodegenState
 initCodegenState =
   CodegenState
-    { _memPointer = 0
-    , _memory           = initMemory
+    { _heapSpaceBegin   = 0
+    , _stackMemEnd      = 0
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
     , _funcRegistry     = FuncRegistry M.empty

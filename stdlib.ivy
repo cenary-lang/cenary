@@ -1,16 +1,5 @@
-int identity(int v) {
-  return v;
-}
-
-int fib(int n) {
-  int a = 0;
-  int b = 1;
-  int sum = 0;
-  while (n > 1) {
-    sum = a + b;
-    a = b;
-    b = sum;
-    n = n - 1;
-  };
-  return sum;
+int id(int b) {
+  int[] a;
+  a = { 1, 2, 3 };
+  return a[1];
 }
