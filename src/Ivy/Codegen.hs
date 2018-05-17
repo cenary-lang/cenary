@@ -166,30 +166,39 @@ codegenStmt (SAssignment name val) = do
   Operand tyR <- codegenExpr val
   assignFromStack tyR name
 
--- codegenStmt stmt@(SArrAssignment name index val) = do
---   Operand tyI iAddr <- codegenExpr index
---   checkTyEq ("index_of_" <> name) TInt tyI
---   Operand tyR addr <- codegenExpr val
---   lookup name >>= \case
---     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
---     Decl _tyL -> throwError (NonInitializedArrayAccess name)
---     Def (TArray _length aTy) oldAddr -> do
---       checkTyEq name aTy tyR
+codegenStmt stmt@(SArrAssignment name index val) = do
+  offset <- use funcOffset
 
---       load addr
+  Operand tyI <- codegenExpr index
+  checkTyEq ("index_of_" <> name) TInt tyI
 
---       load iAddr
---       push32 (sizeInt (sizeof aTy))
---       mul
---       push32 oldAddr
---       add
---       store
---     Def other _ ->
---         throwError
---       $ InternalError
---       $ "codegenStmt ArrAssignment: non-array type is in symbol table"
---       <> "as a definition for ArrAssignment code generation: "
---       <> show other
+  -- [1]
+  Operand tyR <- codegenExpr val
+
+  -- [1, 5]
+  lookup name >>= \case
+    NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
+    Decl _tyL -> throwError (NonInitializedArrayAccess name)
+    Def (TArray aTy) addr -> do
+      checkTyEq name aTy tyR
+      load addr -- [1, 5, 340]
+      -- Size check
+      dup3 -- [1, 5, 340, 1]
+      dup2 -- [1, 5, 340, 1, 340]
+      mload -- [1, 5, 340, 1, 3]
+      branchIf
+        offset
+        (push32 0x01 >> swap1 >> sub >> lt)
+        (stop)
+      -- [1, 5, 340]
+      inc 0x20 -- [1, 5, 360]
+      dup3 -- [1, 5, 360, 1]
+      push32 0x20 -- [1, 5, 360, 1, 20]
+      mul -- [1, 5, 360, 20]
+      add -- [1, 5, 380]
+      mstore -- [1]
+      pop -- []
+    Def ty _ -> throwError (IllegalArrAccess name ty)
 
 codegenStmt (SVarDecl ty name) =
   declVar ty name

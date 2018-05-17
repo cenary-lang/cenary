@@ -45,6 +45,7 @@ data Instruction =
   | EXP
   | CALLDATALOAD
   | DUP2
+  | DUP3
   | SWAP1
   | SWAP2
   | LOG0

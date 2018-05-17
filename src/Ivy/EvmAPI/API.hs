@@ -26,6 +26,7 @@ module Ivy.EvmAPI.API
   , exp
   , calldataload
   , dup2
+  , dup3
   , swap1
   , swap2
   , log0
@@ -76,6 +77,7 @@ toOpcode = \case
   EXP          -> (0x0a, 1)
   CALLDATALOAD -> (0x35, 1)
   DUP2         -> (0x81, 1)
+  DUP3         -> (0x82, 1)
   SWAP1        -> (0x90, 1)
   SWAP2        -> (0x91, 1)
   LOG0         -> (0xA0, 1)
@@ -94,7 +96,7 @@ instance OpcodeM Evm where
     pc += cost
     program %= (addInstr instr)
 
-stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
+stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
 
 stop         = op STOP
 add          = op ADD
@@ -117,6 +119,7 @@ dup1         = op DUP1
 exp          = op EXP
 calldataload = op CALLDATALOAD
 dup2         = op DUP2
+dup3         = op DUP3
 swap1        = op SWAP1
 swap2        = op SWAP2
 log0         = op LOG0

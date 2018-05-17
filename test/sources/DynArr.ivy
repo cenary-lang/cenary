@@ -1,0 +1,6 @@
+int main() {
+  int[] a;
+  a = { 1, 2, 3 };
+  a[3] = 6;
+  return a[2];
+}
