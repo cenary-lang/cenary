@@ -43,6 +43,7 @@ data Stmt =
   | SWhile Expr Block
   | SIf Expr Block
   | SIfThenElse Expr Block Block
+  | SResize Name Expr
   | SReturn Expr
   | SExpr Expr
   deriving (Show, Eq)

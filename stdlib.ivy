@@ -1,3 +1,5 @@
 int main() {
-  return 2;
+  int[] a = { 1, 2 };
+  resize(a, 4);
+  return a[0];
 }

@@ -96,6 +96,7 @@ stmt =
    <|> try assignment
    <|> try sIfThenElse
    <|> try sReturn
+   <|> try sResize
    <|> try sExpr
    <|> sIf
    <?> "Statement"
@@ -139,8 +140,11 @@ varDecl = do
 block :: Parser Block
 block = Block <$> many (stmt <* reserved ";")
 
+around :: Char -> Parser a -> Char -> Parser a
+around l p r = char' l *> whitespace *> p <* whitespace <* char' r
+
 curlied :: Parser a -> Parser a
-curlied p = reserved "{" *> p <* reserved "}"
+curlied p = around '{' p '}'
 
 while :: Parser Stmt
 while = do
@@ -204,6 +208,17 @@ sIfThenElse = do
   return (SIfThenElse pred tBody eBody)
   <?> "if then else"
 
+sResize :: Parser Stmt
+sResize = do
+  reserved "resize"
+  around '(' args ')'
+  where
+    args = do
+      id' <- identifier
+      whitespace >> char' ',' >> whitespace
+      size <- expr
+      return (SResize id' size)
+  
 funModifier :: Parser FunModifier
 funModifier =
   reserved "pure" $> PureModifier

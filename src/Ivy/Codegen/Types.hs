@@ -46,6 +46,9 @@ data Instruction =
   | CALLDATALOAD
   | DUP2
   | DUP3
+  | DUP4
+  | DUP5
+  | DUP6
   | SWAP1
   | SWAP2
   | LOG0
@@ -74,6 +77,7 @@ data CodegenError =
   | ArrayElementsTypeMismatch PrimType PrimType
   | EmptyArrayValue
   | NonInitializedArrayAccess String
+  | NonInitializedArrayResize String
   | IllegalArrAccess String PrimType
   | SupportError String
   | NoReturnStatement
@@ -120,6 +124,7 @@ instance Show CodegenError where
   show (ArrayElementsTypeMismatch ty1 ty2) = "Array has elements from different types: type " <> show ty1 <> " and type " <> show ty2
   show EmptyArrayValue = "Sorry! We can't handle type polymorphism right now, so you should not create empty arrays as right-hand-side values"
   show (NonInitializedArrayAccess name) = "Array " <> name <> " is not initialized yet, and you wanted to access an element of it"
+  show (NonInitializedArrayResize name) = "Array " <> name <> " is not initialized yet, and you wanted to resize it"
   show (IllegalArrAccess name ty) = "You wanted to access to variable " <> name <> " as if it's an array, but it's type is " <> show ty
   show NoReturnStatement = "Functions should have return statement as their last statement"
   show MainFunctionDoesNotExist = "Main function does not exist"
