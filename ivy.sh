@@ -37,6 +37,9 @@ function rewind-deploy {
 }
 
 function compute {
+  if ! [[ $2 ]]; then
+    start_testrpc
+  fi
   DEPLOYMENT_JS=deployment/deployment.current.js
   compile true
   deploy $1
@@ -44,11 +47,14 @@ function compute {
     echo "[!] Compilation did not succeed."
     exit 1
   else
-    if [[ $2 ]]; then
-      sed -i '' s/@call@/"$2"/ "$DEPLOYMENT_JS"
-    fi
+    function_name="${2:-main()}"
+    sed -i '' s/@call@/"$function_name"/ "$DEPLOYMENT_JS"
     node "$DEPLOYMENT_JS"
     rewind-deploy $1
+  fi
+
+  if ! [[ $2 ]]; then
+    start_testrpc
   fi
 }
 
@@ -66,10 +72,8 @@ function red {
 
 # TODO: Tidy up here when you actually learn bash
 function test {
-  if ! [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
-    start_testrpc
-  fi
-  ASSERTIONS=( DynArr.ivy "3" "main()"
+  start_testrpc
+  ASSERTIONS=( DynArr.ivy "9" "main()"
                Id.ivy "3" "id(3)"
                Fibonacci.ivy "610" "fib(15)"
                Adder.ivy "10" "add(3, 7)"
@@ -93,18 +97,19 @@ function test {
       red "$output"
     fi
   done
-
-  if [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
-    kill_testrpc
-  fi
+  kill_testrpc
 }
 
 function start_testrpc {
-  testrpc 1>/dev/null &
+  if ! [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
+    testrpc 1>/dev/null &
+  fi
 }
 
 function kill_testrpc {
-  ps aux|grep testrpc|grep node|awk '{print $2}'|xargs kill -9
+  if [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
+    ps aux|grep testrpc|grep node|awk '{print $2}'|xargs kill -9
+  fi
 }
 
 case $1 in
