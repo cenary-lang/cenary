@@ -506,13 +506,13 @@ codegenExpr (EArray elemExprs) = do
   push32 heapBegin -- [3, 2, 1, 360]
   mload -- [3, 2, 1, 420]
 
-  -- ** Tell its new address to our newly created array
+  -- Tell its new address to our newly created array
   push32 arrAddr -- [3, 2, 1, 420, 40]
   dup2 -- [3, 2, 1, 420, 40, 420]
   swap1 -- [3, 2, 1, 420, 420, 40]
   mstore -- [3, 2, 1, 420]
 
-  -- ** Actually store the elements
+  -- Actually store the elements
   dup1 -- [3, 2, 1, 420, 420]
   push32 (fromIntegral (length elemExprs)) -- [3, 2, 1, 420, 420, 3]
   swap1 -- [3, 2, 1, 420, 3, 420]
