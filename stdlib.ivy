@@ -1,13 +1,13 @@
 int a;
-mapping[int][int] myMap;
+mapping[char[]][int] myMap;
 
 int yihu() {
   return 0;
 };
 
 int main() {
-  int wow = myMap{3};
+  int wow = myMap{"yigit"};
   a = 3;
   int b = a + 8;
-  return a;
+  return wow;
 };

@@ -275,6 +275,7 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     Decl _tyL _ -> throwError (NonInitializedArrayResize name)
     Def (TArray _) addr persistence -> do
       load addr persistence -- [NewSize, StackAddr]
+      swap1 -- [StackAddr, NewSize]
       startResizingProcedure persistence -- [StackAddr]
       pop
     Def ty _ _ -> do
@@ -296,7 +297,6 @@ startResizingProcedure persistence = do
   branchIfElse
     (offset)
     (do
-      swap1 -- [StackAddr, NewSize]
       dup2 -- [StackAddr, NewSize, StackAddr]
       dup2 -- [StackAddr, NewSize, StackAddr, NewSize]
       swap1 -- [StackAddr, NewSize, NewSize, StackAddr]
@@ -681,9 +681,9 @@ codegenExpr (EMapIdentifier name key) = do
         Nothing ->
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order ->
-          -- [StackAddr]
           case tyKey of
             TInt -> do
+              -- [StackAddr]
               load' persistence -- [Value]
               valAddr <- alloc persistence
               orderAddr <- alloc persistence
@@ -698,26 +698,34 @@ codegenExpr (EMapIdentifier name key) = do
               load' persistence
               return (Operand tyAnnotVal)
             TArray _ ->  do
+              -- [ArrAddr]
+              stackAddr <- alloc persistence
+              push32 stackAddr -- [ArrAddr, StackAddr]
+              store' persistence -- []
+              push32 stackAddr -- [StackAddr]
+
               dup1 >> load' persistence -- [StackAddr, ArrAddr]
               load' persistence -- [StackAddr, ArrLength]
               inc 0x01 -- [StackAddr, ArrLength + 1]
               dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
               swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
+              swap1 -- [ArrLength + 1, StackAddr, ArrLength + 1]
               startResizingProcedure persistence -- [ArrLength + 1, StackAddr]
               swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
               load' persistence -- [StackAddr, ArrLength + 1, ArrAddr]
               dup2 -- [StackAddr, ArrLength + 1, ArrAddr, ArrLength + 1]
-              dec 0x01 -- [StackAddr, ArrLength + 1, ArrAddr, ArrLength]
-              push32 0x20 >> mul -- [StackAddr, ArrLength + 1, ArrAddr, 0x20 * ArrLength]
-              add -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * ArrLength]
-              push32 order -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * ArrLength, Order]
-              swap1 -- [StackAddr, ArrLength + 1, Order, ArrAddr + 0x20 * ArrLength]
+              push32 0x20 >> mul -- [StackAddr, ArrLength + 1, ArrAddr, 0x20 * (ArrLength + 1)]
+              add -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * (ArrLength + 1)]
+              push32 order -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * (ArrLength + 1), Order]
+              swap1 -- [StackAddr, ArrLength + 1, Order, ArrAddr + 0x20 * (ArrLength + 1)]
               store' persistence -- [StackAddr, ArrLength + 1]
-              swap1 -- [ArrLength + 1, StackAddr]
-              load' persistence -- [ArrLength + 1, ArrAddr]
-              swap1 >> dup2 -- [ArrAddr, ArrLength + 1, ArrAddr]
-              add -- [ArrAddr, ArrLength + 1 + ArrAddr]
-              swap1 -- [ArrLength + 1 + ArrAddr, ArrAddr]
+              push32 0x20 >> mul -- [StackAddr, (ArrLength + 1) * 0x20]
+              swap1 -- [(ArrLength + 1) * 0x20, StackAddr]
+              load' persistence -- [(ArrLength + 1) * 0x20, ArrAddr]
+              swap1 >> dup2 -- [ArrAddr, (ArrLength + 1) * 0x20, ArrAddr]
+              add -- [ArrAddr, (ArrLength + 1) * 0x20 + ArrAddr]
+              inc 0x20 -- [ArrAddr, (ArrLength + 2) * 0x20 + ArrAddr]
+              swap1 -- [(ArrLength + 2) * 0x20 + ArrAddr, ArrAddr]
               sha3 -- [SHA3]
               load' persistence -- [Value]
               return (Operand tyAnnotVal)
