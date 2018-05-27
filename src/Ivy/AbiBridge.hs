@@ -33,7 +33,7 @@ transformAstToAbi abiInternal abiEncode ast =
   abiEncode <$> abiInternal ast
 
 astToAbiIR :: forall m. MonadError Error m => S.AST -> m Abi.Abi
-astToAbiIR = fmap Abi.Abi . mapM func_to_abi
+astToAbiIR = fmap Abi.Abi . mapM func_to_abi . foldl (\accum stmt -> case stmt of S.GlobalDecl stmt -> accum; S.GlobalFunc funStmt -> funStmt:accum) []
   where
     func_to_abi :: S.FunStmt -> m Abi.Function
     func_to_abi (S.FunStmt (S.FunSig _ name args) _ retTy) = do

@@ -9,4 +9,4 @@ int fib(int n) {
     n = n - 1;
   };
   return sum;
-}
+};

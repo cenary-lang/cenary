@@ -1,6 +1,6 @@
 bool even(int a) {
   return a % 2 == 0;
-}
+};
 
 int main(int a) {
   int result = 0;
@@ -10,4 +10,4 @@ int main(int a) {
     result = 6;
   };
   return result;
-}
+};

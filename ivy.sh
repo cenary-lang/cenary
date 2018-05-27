@@ -74,7 +74,6 @@ function red {
 function test {
   start_testrpc
   . ./test/assertions
-  echo "$LEN"
   for i in $(eval echo "{0.."$(($LEN - 1))"..3}"); do
     filename="${ASSERTIONS[$i]}"
     assertion_text="${ASSERTIONS[$i + 1]}"

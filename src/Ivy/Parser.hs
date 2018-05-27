@@ -5,7 +5,6 @@
 module Ivy.Parser where
 
 --------------------------------------------------------------------------------
-import           Control.Arrow ((>>>))
 import           Data.Functor
 import           Data.Functor.Identity
 import qualified Data.Text as T
@@ -84,6 +83,7 @@ expr = buildExpressionParser binops expr'
          <|> try ePrim
          <|> try eFunCall
          <|> try eArrIdentifier
+         -- <|> try eMapIdentifier
          <|> eIdentifier
          <?>  "factor"
 
@@ -91,12 +91,13 @@ stmt :: Parser Stmt
 stmt =
   try declAndAssignment
    <|> try while
-   <|> try varDecl
    <|> try arrAssignment
+   <|> try mapAssignment
    <|> try assignment
    <|> try sIfThenElse
    <|> try sResize
    <|> try sReturn
+   <|> try varDecl
    <|> try sExpr
    <|> sIf
    <?> "Statement"
@@ -124,9 +125,21 @@ tyArray = do
   char' ']'
   return (TArray type')
 
+tyMap :: Parser PrimType
+tyMap = do
+  reserved "mapping"
+  TMap
+    <$> around '[' anyType ']'
+    <*> around '[' anyType ']'
+
+anyType :: Parser PrimType
+anyType = try tyMap
+      <|> try tyArray
+      <|> typeAnnot
+
 typedIdentifier :: Parser (PrimType, Name)
 typedIdentifier = do
-  type' <- try tyArray <|> typeAnnot
+  type' <- anyType
   whitespace
   name <- identifier
   return (type', name)
@@ -141,7 +154,7 @@ block :: Parser Block
 block = Block <$> many (stmt <* reserved ";")
 
 around :: Char -> Parser a -> Char -> Parser a
-around l p r = reserved (l:"") *> p <* whitespace <* reserved (r:"")
+around l p r = whitespace *> char' l *> whitespace *> p <* whitespace <* char' r <* whitespace
 
 curlied :: Parser a -> Parser a
 curlied p = around '{' p '}'
@@ -168,15 +181,24 @@ arrAssignment = do
   index <- expr
   char' ']'
   whitespace
-  reserved "="
+  char' '='
   whitespace
   val <- expr
   return (SArrAssignment name index val)
   <?> "array assignment"
 
+mapAssignment :: Parser Stmt
+mapAssignment = do
+  name <- identifier
+  key <- around '{' expr '}'
+  whitespace
+  char' '='
+  val <- expr
+  return (SMapAssignment name key val)
+
 declAndAssignment :: Parser Stmt
 declAndAssignment = do
-  type' <- try tyArray <|> typeAnnot
+  type' <- anyType
   whitespace
   name <- identifier
   reserved "="
@@ -193,10 +215,14 @@ eIdentifier =
 eArrIdentifier :: Parser Expr
 eArrIdentifier = do
   name <- identifier
-  char' '['
-  index <- expr
-  char' ']'
+  index <- around '[' expr ']'
   return (EArrIdentifier name index)
+
+eMapIdentifier :: Parser Expr
+eMapIdentifier = do
+  name <- identifier
+  key <- around '{' expr '}'
+  return (EMapIdentifier name key)
 
 sIfThenElse :: Parser Stmt
 sIfThenElse = do
@@ -227,7 +253,7 @@ sFunDef :: Parser FunStmt
 sFunDef = do
   whitespace
   modifiers <- many funModifier
-  retType <- try tyArray <|> typeAnnot
+  retType <- anyType
   whitespace
   name <- identifier
   whitespace
@@ -257,5 +283,11 @@ sIf = do
   return (SIf pred body)
   <?> "if statement"
 
-parse :: T.Text -> Either ParseError [FunStmt]
-parse = T.unpack >>> P.parse (P.many sFunDef) "<stmt-toplevel>"
+parse :: T.Text -> Either ParseError [GlobalStmt]
+parse = P.parse p "<stmt-toplevel>" . T.unpack
+  where
+    func = GlobalFunc <$> try sFunDef
+    decl = GlobalDecl <$> stmt
+    p = many $ (try func <|> decl)
+             <* char' ';'
+             <* whitespace

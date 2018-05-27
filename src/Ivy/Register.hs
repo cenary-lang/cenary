@@ -11,6 +11,7 @@ import Ivy.Codegen.Memory
 import Ivy.Syntax
 import Ivy.EvmAPI.API
 import Data.Functor (void)
+import Ivy.Codegen.Types
 
 data Register =
     Reg_A
@@ -25,7 +26,7 @@ regAddr = (* 0x20) . fromIntegral . fromEnum
 
 allocRegisters :: MemoryM m => m ()
 allocRegisters = do
-  for_ [(minBound :: Register)..maxBound] $ const (void alloc)
+  for_ [(minBound :: Register)..maxBound] $ const (void (alloc Temporary))
 
 storeReg :: (OpcodeM m, MemoryM m) => Register -> m ()
 storeReg reg = push32 (regAddr reg) >> mstore

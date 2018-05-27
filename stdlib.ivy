@@ -1,11 +1,13 @@
+int a;
+mapping[char[]][int] myMap;
+
 int yihu() {
   return 0;
-}
+};
 
 int main() {
-  int[] a = { 1, 2, 3 };
-  resize(a, 4);
-  a[3] = 9;
-  a[2] = 88;
-  return a[2];
-}
+  myMap{"yigit"} = 3;
+  a = 3;
+  int b = a + 8;
+  return b;
+};

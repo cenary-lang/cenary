@@ -19,6 +19,8 @@ module Ivy.EvmAPI.API
   , mload
   , mstore
   , mstore8
+  , sload
+  , sstore
   , jump
   , jumpi
   , codecopy
@@ -70,6 +72,8 @@ toOpcode = \case
   MLOAD        -> (0x51, 1)
   MSTORE       -> (0x52, 1)
   MSTORE8      -> (0x53, 1)
+  SLOAD        -> (0x54, 1)
+  SSTORE       -> (0x55, 1)
   JUMP         -> (0x56, 1)
   JUMPI        -> (0x57, 1)
   JUMPDEST     -> (0x5b, 1)
@@ -103,7 +107,7 @@ instance OpcodeM Evm where
     pc += cost
     program %= (addInstr instr)
 
-stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
+stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, sload, sstore, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
 
 stop         = op STOP
 add          = op ADD
@@ -119,6 +123,8 @@ pop          = op POP
 mload        = op MLOAD
 mstore       = op MSTORE
 mstore8      = op MSTORE8
+sload        = op SLOAD
+sstore       = op SSTORE
 jump         = op JUMP
 jumpi        = op JUMPI
 codecopy     = op CODECOPY

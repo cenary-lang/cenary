@@ -34,6 +34,8 @@ data Instruction =
   | MLOAD
   | MSTORE
   | MSTORE8
+  | SLOAD
+  | SSTORE
   | JUMP
   | JUMPI
   | JUMPDEST
@@ -80,6 +82,7 @@ data CodegenError =
   | NonInitializedArrayResize String
   | IllegalArrAccess String PrimType
   | SupportError String
+  | CannotResizeNonArray PrimType
   | NoReturnStatement
 
 type Addr = Integer
@@ -129,6 +132,7 @@ instance Show CodegenError where
   show NoReturnStatement = "Functions should have return statement as their last statement"
   show MainFunctionDoesNotExist = "Main function does not exist"
   show (SupportError description) = "Not supported yet: " <> description
+  show (CannotResizeNonArray ty) = "You tried to resize a variable of type " <> show ty <> ", only array types are resizable, are you sure you know what you are doing?"
 
 data Size =
     Size_1
@@ -141,11 +145,16 @@ data Size =
 type ParamBaseAddrs = (Integer,     Integer)
                   -- ^ Param count, Base address
 
-data Address = VarAddr (Maybe Integer)
+data Address = VarAddr (Maybe Integer) VariablePersistence
              -- ^      Variable adress
              | FunAddr Integer
              -- ^      PC
              deriving Show
+
+data VariablePersistence =
+    Permanent
+  | Temporary
+  deriving (Show, Eq)
 
 type Context = M.Map String (PrimType, Address)
 
@@ -190,14 +199,18 @@ initProgram = Program Seq.empty
 addInstr :: Instruction -> Program -> Program
 addInstr instr p = p & unProgram %~ (instr <|)
 
+type MappingOrder = M.Map String Integer
+
 data CodegenState = CodegenState
-  { _env            :: !Env
-  , _heapSpaceBegin :: Integer -- Dis boi should stay lazy or bad things happen
-  , _stackMemEnd    :: !Integer
-  , _pc             :: !Integer
-  , _funcRegistry   :: !FuncRegistry
-  , _program        :: Program
-  , _funcOffset     :: !Integer
+  { _env             :: !Env
+  , _heapSpaceBegin  :: Integer -- Dis boi should stay lazy or bad things happen
+  , _stackMemEnd     :: !Integer
+  , _stackStorageEnd :: !Integer
+  , _pc              :: !Integer
+  , _funcRegistry    :: !FuncRegistry
+  , _program         :: Program
+  , _funcOffset      :: !Integer
+  , _mappingOrder    :: MappingOrder
   }
 
 makeLenses ''CodegenState
@@ -212,6 +225,6 @@ data VarsFun
 
 data VariableStatus a where
   NotDeclared :: VariableStatus a
-  Decl        :: PrimType -> VariableStatus VarsVar
-  Def         :: PrimType -> Integer -> VariableStatus VarsVar
+  Decl        :: PrimType -> VariablePersistence -> VariableStatus VarsVar
+  Def         :: PrimType -> Integer -> VariablePersistence -> VariableStatus VarsVar
   FunDef      :: PrimType -> Integer -> VariableStatus VarsFun
