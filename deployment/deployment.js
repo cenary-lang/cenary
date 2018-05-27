@@ -15,9 +15,13 @@ web3.eth.getAccounts().then(addresses => {
   var Contract = new web3.eth.Contract(abi, {data: bin, from: addresses[0], gasPrice: 20000000000, gas: 1000000 });
   var deployment = Contract.deploy().send();
   deployment.then(newContract => {
-    newContract.methods.@call@.call().then(result => {
-      console.log("\n@call@:");
-      console.log(result);
-    });
+    newContract.methods.@call@.call()
+      .then(result => {
+        console.log("\n@call@:");
+        console.log(result);
+      })
+      .catch(err => {
+        console.log(err); 
+      });
   });
 });

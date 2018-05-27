@@ -58,6 +58,7 @@ data Instruction =
   | LOG2
   | RETURN
   | ADDRESS
+  | SHA3
   deriving Show
 
 data ErrorDetails = NoDetails
@@ -83,6 +84,8 @@ data CodegenError =
   | IllegalArrAccess String PrimType
   | SupportError String
   | CannotResizeNonArray PrimType
+  | WrongMapKeyType String PrimType PrimType
+  | Custom String
   | NoReturnStatement
 
 type Addr = Integer
@@ -133,6 +136,7 @@ instance Show CodegenError where
   show MainFunctionDoesNotExist = "Main function does not exist"
   show (SupportError description) = "Not supported yet: " <> description
   show (CannotResizeNonArray ty) = "You tried to resize a variable of type " <> show ty <> ", only array types are resizable, are you sure you know what you are doing?"
+  show (Custom err) = "Non-specialized error: " <> err
 
 data Size =
     Size_1
@@ -202,15 +206,16 @@ addInstr instr p = p & unProgram %~ (instr <|)
 type MappingOrder = M.Map String Integer
 
 data CodegenState = CodegenState
-  { _env             :: !Env
-  , _heapSpaceBegin  :: Integer -- Dis boi should stay lazy or bad things happen
-  , _stackMemEnd     :: !Integer
-  , _stackStorageEnd :: !Integer
-  , _pc              :: !Integer
-  , _funcRegistry    :: !FuncRegistry
-  , _program         :: Program
-  , _funcOffset      :: !Integer
-  , _mappingOrder    :: MappingOrder
+  { _env              :: !Env
+  , _heapSpaceBegin   :: Integer -- Dis boi should stay lazy or bad things happen
+  , _stackMemEnd      :: !Integer
+  , _stackStorageEnd  :: !Integer
+  , _pc               :: !Integer
+  , _funcRegistry     :: !FuncRegistry
+  , _program          :: Program
+  , _funcOffset       :: !Integer
+  , _mappingOrder     :: MappingOrder
+  , _nextMappingOrder :: Integer
   }
 
 makeLenses ''CodegenState

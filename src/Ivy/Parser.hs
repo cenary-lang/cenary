@@ -83,7 +83,7 @@ expr = buildExpressionParser binops expr'
          <|> try ePrim
          <|> try eFunCall
          <|> try eArrIdentifier
-         -- <|> try eMapIdentifier
+         <|> try eMapIdentifier
          <|> eIdentifier
          <?>  "factor"
 

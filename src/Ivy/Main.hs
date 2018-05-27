@@ -82,6 +82,7 @@ initCodegenState =
     , _program          = initProgram
     , _funcOffset       = 0
     , _mappingOrder     = M.empty
+    , _nextMappingOrder = 0
     }
 
 data Environment =

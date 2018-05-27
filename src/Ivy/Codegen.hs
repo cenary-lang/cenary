@@ -83,8 +83,15 @@ instance ContextM Evm where
   updateSig sig' = env %= (sig .~ sig')
   ctxDeclareVar name ty persistence =
     lookup name >>= \case
-      NotDeclared ->
+      NotDeclared -> do
         updateCtx ((True,) . M.insert name (ty, VarAddr Nothing persistence))
+        case ty of
+          TMap _ _ -> do
+            addr <- alloc persistence
+            createMappingOrder name
+            ctxDefineVar name addr
+          _ -> pure ()
+        
       Decl _ _ ->
         throwError $ InternalError $ "TODO (2)"
       Def _ _ _ ->
@@ -268,7 +275,8 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     Decl _tyL _ -> throwError (NonInitializedArrayResize name)
     Def (TArray _) addr persistence -> do
       load addr persistence -- [NewSize, StackAddr]
-      startResizingProcedure persistence
+      startResizingProcedure persistence -- [StackAddr]
+      pop
     Def ty _ _ -> do
       throwError $ CannotResizeNonArray ty
 
@@ -276,6 +284,9 @@ codegenStmt stmt@(SResize name sizeExpr) = do
 -- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
+-- |
+-- Input: [StackAddr, NewSize]
+-- Output: [StackAddr]
 startResizingProcedure
   :: forall m. (MemoryM m, OpcodeM m, MonadState CodegenState m, MonadFix m)
   => VariablePersistence
@@ -345,7 +356,9 @@ startResizingProcedure persistence = do
           loopEnd <- jumpdest
           -- [NewAddr, StackAddr, OldAddr, 0]
           (pop >> pop) -- [NewAddr, StackAddr]
-          mstore -- []
+          swap1 -- [StackAddr, NewAddr]
+          dup2 -- [StackAddr, NewAddr, StackAddr]
+          mstore -- [StackAddr]
       pure ()
 
 putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgInfo -> m ()
@@ -656,15 +669,58 @@ codegenExpr (EArray elemExprs) = do
         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
 
 codegenExpr (EMapIdentifier name key) = do
-  Operand ty <- codegenExpr key
-  -- [ArrStackAddr]
-  case ty of
-    TArray TChar -> 
+  lookup name >>= \case
+    NotDeclared ->
+      throwError (VariableNotDeclared name (TextDetails "EMapIdentifier"))
+    Decl _ _ ->
+      throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
+    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+      Operand tyKey <- codegenExpr key
+      checkTyEq name tyAnnotKey tyKey
       lookupMappingOrder name >>= \case
         Nothing ->
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order ->
-          undefined
+          -- [StackAddr]
+          case tyKey of
+            TInt -> do
+              load' persistence -- [Value]
+              valAddr <- alloc persistence
+              orderAddr <- alloc persistence
+              push32 valAddr -- [Value, ValAddr]
+              store' persistence -- []
+              push32 order -- [Order]
+              push32 orderAddr -- [Order, OrderAddr]
+              store' persistence -- []
+              push32 (valAddr + 0x40)
+              push32 valAddr
+              sha3
+              load' persistence
+              return (Operand tyAnnotVal)
+            TArray _ ->  do
+              dup1 >> load' persistence -- [StackAddr, ArrAddr]
+              load' persistence -- [StackAddr, ArrLength]
+              inc 0x01 -- [StackAddr, ArrLength + 1]
+              dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
+              swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
+              startResizingProcedure persistence -- [ArrLength + 1, StackAddr]
+              swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
+              load' persistence -- [StackAddr, ArrLength + 1, ArrAddr]
+              dup2 -- [StackAddr, ArrLength + 1, ArrAddr, ArrLength + 1]
+              dec 0x01 -- [StackAddr, ArrLength + 1, ArrAddr, ArrLength]
+              push32 0x20 >> mul -- [StackAddr, ArrLength + 1, ArrAddr, 0x20 * ArrLength]
+              add -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * ArrLength]
+              push32 order -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * ArrLength, Order]
+              swap1 -- [StackAddr, ArrLength + 1, Order, ArrAddr + 0x20 * ArrLength]
+              store' persistence -- [StackAddr, ArrLength + 1]
+              swap1 -- [ArrLength + 1, StackAddr]
+              load' persistence -- [ArrLength + 1, ArrAddr]
+              swap1 >> dup2 -- [ArrAddr, ArrLength + 1, ArrAddr]
+              add -- [ArrAddr, ArrLength + 1 + ArrAddr]
+              swap1 -- [ArrLength + 1 + ArrAddr, ArrAddr]
+              sha3 -- [SHA3]
+              load' persistence -- [Value]
+              return (Operand tyAnnotVal)
 
 lookupMappingOrder
   :: MonadState CodegenState m
@@ -672,6 +728,19 @@ lookupMappingOrder
   -> m (Maybe Integer)
 lookupMappingOrder name =
   M.lookup name <$> use mappingOrder
+
+createMappingOrder
+  :: (MonadState CodegenState m, MonadError CodegenError m)
+  => Name
+  -> m ()
+createMappingOrder name = do
+  nextOrder <- nextMappingOrder <<+= 1
+  currentMappingOrder <- use mappingOrder
+  case M.lookup name currentMappingOrder of
+    Nothing ->
+      mappingOrder %= M.insert name nextOrder
+    Just _ ->
+      throwError $ InternalError $ "Multiple mapping order insert attempts for mapping named " <> name
 
 codegenPhases :: CodegenM m => AST -> m ()
 codegenPhases functions = do

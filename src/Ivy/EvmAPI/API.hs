@@ -45,6 +45,7 @@ module Ivy.EvmAPI.API
   , generateByteCode
   , inc
   , dec
+  , sha3
   ) where
 
 import           Control.Lens hiding (op)
@@ -96,6 +97,7 @@ toOpcode = \case
   LOG2         -> (0xA2, 1)
   RETURN       -> (0xf3, 1)
   ADDRESS      -> (0x30, 1)
+  SHA3         -> (0x20, 1)
 
 -- | Class of monads that can run opcodes
 class Monad m => OpcodeM m where
@@ -107,7 +109,7 @@ instance OpcodeM Evm where
     pc += cost
     program %= (addInstr instr)
 
-stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, sload, sstore, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
+stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, sload, sstore, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, log0, log1, log2, op_return, address, sha3 :: OpcodeM m => m ()
 
 stop         = op STOP
 add          = op ADD
@@ -143,6 +145,7 @@ log1         = op LOG1
 log2         = op LOG2
 op_return    = op RETURN
 address      = op ADDRESS
+sha3         = op SHA3
 
 push1 :: OpcodeM m => Integer -> m ()
 push1 = op . PUSH1
