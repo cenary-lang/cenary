@@ -239,64 +239,70 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL -> throwError (NonInitializedArrayResize name)
     Def (TArray aTy) addr -> do
-      load addr -- [4, 340]
+      load addr -- [NewSize, StackAddr]
       branchIfElse (offset)
                    (do
-                     swap1 -- [340, 4]
-                     dup2 -- [340, 4, 340]
-                     dup2 -- [340, 4, 340, 4]
-                     swap1 -- [340, 4, 4, 340]
-                     mload -- [340, 4, 4, 3]
-                     lt -- [340, 4, 1]
+                     swap1 -- [StackAddr, NewSize]
+                     dup2 -- [StackAddr, NewSize, StackAddr]
+                     dup2 -- [StackAddr, NewSize, StackAddr, NewSize]
+                     swap1 -- [StackAddr, NewSize, NewSize, StackAddr]
+                     mload -- [StackAddr, NewSize, NewSize, OldHeapAddr]
+                     mload -- [StackAddr, NewSize, NewSize, OldSize]
+                     lt -- [StackAddr, NewSize, OldSize < NewSize]
                    )
                    -- new size is bigger, allocate new array space
-                   -- [340, 4]
-                   moveToNewArrAddr
-                   -- [OldAddr, 2]
+                   -- [StackAddr, NewSize] | NewSize > OldSize
+                   (moveToNewArrAddr offset)
+                   -- [StackAddr, NewSize] | NewSize <= OldSize
                    (swap1 >> mstore) -- new size is smaller, just set the length identifier address
   where
-    moveToNewArrAddr :: m ()
-    moveToNewArrAddr = do
+    moveToNewArrAddr :: Integer -> m ()
+    moveToNewArrAddr offset = do
+      -- [StackAddr, NewSize]
       rec heapBegin <- use heapSpaceBegin
           push32 heapBegin
-          mload -- [OldAddr, 4, NewAddr]
-          dup2 >> dup2 -- [OldAddr, 4, NewAddr, 4, NewAddr]
-          mstore -- [OldAddr, 4, NewAddr]
-          swap2 -- [NewAddr, 4, OldAddr]
-          dup1 -- [NewAddr, 4, OldAddr, OldAddr]
-          mload -- [NewAddr, 4, OldAddr, 3]
+          mload -- [StackAddr, NewSize, NewAddr]
+          swap1 -- [StackAddr, NewAddr, NewSize]
+          dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
+          mstore -- [StackAddr, NewAddr]
+          swap1 -- [NewAddr, StackAddr]
+          dup1 >> mload -- [NewAddr, StackAddr, OldAddr]
+          dup1 >> mload -- [NewAddr, StackAddr, OldAddr, OldSize]
 
           loopBegin <- jumpdest
 
           -- Test for loop
-          -- [NewAddr, 4, OldAddr, 3]
-          dup1 -- [NewAddr, 4, OldAddr, 3, 3]
-          (push32 0 >> lt) -- [NewAddr, 4, OldAddr, 3, 1]
-          iszero -- [NewAddr, 4, OldAddr, 3, 0]
-          push32 loopEnd -- [NewAddr, 4, OldAddr, 3, 0, loopEnd]
-          jumpi -- [NewAddr, 4, OldAddr, 3]
+          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
+          (push32 0 >> lt) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize > 0]
+          iszero -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0]
+          push32 (loopEnd - offset) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0, loopEnd]
+          jumpi -- [NewAddr, StackAddr, OldAddr, OldSize]
 
-          dec 0x01 -- [NewAddr, 4, OldAddr, 2]
-          dup1 -- [NewAddr, 4, OldAddr, 2, 2]
-          (push32 0x20 >> mul) -- [NewAddr, 4, OldAddr, 2, 0x40]
-          dup1 -- [NewAddr, 4, OldAddr, 2, 0x40, 0x40]
-          dup4 -- [NewAddr, 4, OldAddr, 2, 0x40, 0x40, OldAddr]
-          add -- [NewAddr, 4, OldAddr, 2, 0x40, OldAddr + 0x40]
-          dup6 -- [NewAddr, 4, OldAddr, 2, 0x40, OldAddr + 0x40, NewAddr]
-          dup3 -- [NewAddr, 4, OldAddr, 2, 0x40, OldAddr + 0x40, NewAddr, 0x40]
-          add -- [NewAddr, 4, OldAddr, 2, 0x40, OldAddr + 0x40, NewAddr + 0x40]
-          swap1 -- [NewAddr, 4, OldAddr, 2, 0x40, NewAddr + 0x40, OldAddr + 0x40]
-          mload -- [NewAddr, 4, OldAddr, 2, 0x40, NewAddr + 0x40, oldVal[2]]
-          swap1 -- [NewAddr, 4, OldAddr, 2, 0x40, oldVal[2], NewAddr + 0x40]
-          mstore -- [NewAddr, 4, OldAddr, 2, 0x40]
-          pop -- [NewAddr, 4, OldAddr, 2]
+          -- Loop body
+          -- [NewAddr, StackAddr, OldAddr, OldSize]
+          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
+          dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1] (index indicated by oldSize)
+          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1, oldSize - 1]
+          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1)]
+          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
+          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1) + oldAddr]
+          mload -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
+          swap1 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], oldSize - 1]
+          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1)]
+          dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1), NewAddr]
+          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1) + NewAddr]
+          mstore -- [NewAddr, StackAddr, OldAddr, OldSize]
+          dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
 
           -- Jump back to beginning of loop
-          push32 loopBegin
+          push32 (loopBegin - offset)
           jump
 
           -- End of the loop
           loopEnd <- jumpdest
+          -- [NewAddr, StackAddr, OldAddr, 0]
+          (pop >> pop) -- [NewAddr, StackAddr]
+          mstore -- []
       pure ()
 
 codegenStmt (SReturn retExpr) =

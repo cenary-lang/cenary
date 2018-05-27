@@ -1,5 +1,11 @@
+int yihu() {
+  return 0;
+}
+
 int main() {
-  int[] a = { 1, 2 };
+  int[] a = { 1, 2, 3 };
   resize(a, 4);
-  return a[0];
+  a[3] = 9;
+  a[2] = 88;
+  return a[2];
 }

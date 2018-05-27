@@ -171,3 +171,10 @@ inc val = push32 val >> add
 
 dec :: OpcodeM m => Integer -> m ()
 dec val = push32 val >> swap1 >> sub
+
+leq :: OpcodeM m => m ()
+leq = do
+  push32 1
+  swap1
+  sub
+  lt

@@ -95,8 +95,8 @@ stmt =
    <|> try arrAssignment
    <|> try assignment
    <|> try sIfThenElse
-   <|> try sReturn
    <|> try sResize
+   <|> try sReturn
    <|> try sExpr
    <|> sIf
    <?> "Statement"
@@ -141,7 +141,7 @@ block :: Parser Block
 block = Block <$> many (stmt <* reserved ";")
 
 around :: Char -> Parser a -> Char -> Parser a
-around l p r = char' l *> whitespace *> p <* whitespace <* char' r
+around l p r = reserved (l:"") *> p <* whitespace <* reserved (r:"")
 
 curlied :: Parser a -> Parser a
 curlied p = around '{' p '}'
@@ -225,6 +225,7 @@ funModifier =
 
 sFunDef :: Parser FunStmt
 sFunDef = do
+  whitespace
   modifiers <- many funModifier
   retType <- try tyArray <|> typeAnnot
   whitespace
@@ -235,6 +236,7 @@ sFunDef = do
   char' ')'
   whitespace
   body <- curlied block
+  whitespace
   return (FunStmt (FunSig modifiers name args) body retType)
   <?> "function definition"
 

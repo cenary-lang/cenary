@@ -1,0 +1,15 @@
+#!/bin/bash
+
+ASSERTIONS=( Resizing.ivy "6" "read()"
+             Resizing.ivy "98" "write(98)"
+             Resizing.ivy "0" "out_of_bounds_read()"
+             Resizing.ivy "0" "out_of_bounds_write()"
+             DynArr.ivy "9" "main()"
+             Id.ivy "3" "id(3)"
+             Fibonacci.ivy "610" "fib(15)"
+             Adder.ivy "10" "add(3, 7)"
+             Adder.ivy "3" "add(1, 2)"
+             Branching.ivy "3" "main(4)"
+             Branching.ivy "6" "main(5)"
+           )
+LEN=${#ASSERTIONS[@]}

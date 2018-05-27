@@ -73,15 +73,9 @@ function red {
 # TODO: Tidy up here when you actually learn bash
 function test {
   start_testrpc
-  ASSERTIONS=( DynArr.ivy "9" "main()"
-               Id.ivy "3" "id(3)"
-               Fibonacci.ivy "610" "fib(15)"
-               Adder.ivy "10" "add(3, 7)"
-               Adder.ivy "3" "add(1, 2)"
-               Branching.ivy "3" "main(4)"
-               Branching.ivy "6" "main(5)"
-             )
-  for i in {0..20..3}; do
+  . ./test/assertions
+  echo "$LEN"
+  for i in $(eval echo "{0.."$(($LEN - 1))"..3}"); do
     filename="${ASSERTIONS[$i]}"
     assertion_text="${ASSERTIONS[$i + 1]}"
     function_call="${ASSERTIONS[$i + 2]}"
