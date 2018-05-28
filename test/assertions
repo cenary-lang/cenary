@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ASSERTIONS=( Resizing.ivy "6" "read()"
+ASSERTIONS=( Resizing.ivy "5" "read()"
              Resizing.ivy "98" "write(98)"
              Resizing.ivy "0" "out_of_bounds_read()"
              Resizing.ivy "0" "out_of_bounds_write()"

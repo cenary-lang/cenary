@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -19,46 +20,39 @@ import           Ivy.Syntax
 --------------------------------------------------------------------------------
 
 class (Functor m, Applicative m, Monad m) => MemoryM m where
-  storeAddressed
-    :: Integer -- Address of the value. Value should be loaded from this address
-    -> Integer -- Address to put value on
-    -> m ()
   load
     :: Integer
+    -> VariablePersistence
     -> m ()
-  storeVal
-    :: Integer -- Actual value
-    -> Integer -- Address to put value on
+  load'
+    :: VariablePersistence
     -> m ()
   alloc
-    :: m Integer
-  store
-    :: m ()
+    :: VariablePersistence
+    -> m Integer
+  store'
+    :: VariablePersistence
+    -> m ()
   push
     :: Integer
     -> m ()
 
 instance MemoryM Evm where
-  storeAddressed valAddr destAddr = do
-    -- Initial state
-    load valAddr
-    push32 destAddr
-    store
-
-  load addr = do
+  load addr persistence = do
     push32 addr
-    mload
+    load' persistence
 
-  storeVal val destAddr = do
-    push32 val
-    push32 destAddr
-    store
+  load' = \case
+    Permanent -> sload
+    Temporary -> mload
 
-  store =
-    mstore
+  store' = \case
+    Permanent -> sstore
+    Temporary -> mstore
 
-  alloc =
-    stackMemEnd <<+= 0x20
+  alloc = \case
+    Permanent -> stackStorageEnd <<+= 0x20
+    Temporary -> stackMemEnd <<+= 0x20
 
   push val =
     push32 val -- OPTIMIZE: different PUSH variants can be used for this task

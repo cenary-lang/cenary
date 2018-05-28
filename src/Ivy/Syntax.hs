@@ -7,7 +7,7 @@ module Ivy.Syntax where
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-type AST = [FunStmt]
+type AST = [GlobalStmt]
 
 type Name = String
 
@@ -32,6 +32,7 @@ data PrimType =
   | TChar
   | TBool
   | TArray PrimType
+  | TMap PrimType PrimType
   | TFun PrimType
   deriving (Show, Eq)
 
@@ -40,6 +41,7 @@ data Stmt =
   | SDeclAndAssignment PrimType Name Expr
   | SAssignment Name Expr
   | SArrAssignment Name Expr Expr
+  | SMapAssignment Name Expr Expr
   | SWhile Expr Block
   | SIf Expr Block
   | SIfThenElse Expr Block Block
@@ -55,6 +57,10 @@ data FunModifier =
 data FunSig = FunSig [FunModifier] String [(PrimType, Name)]
   deriving (Show, Eq)
 
+data GlobalStmt = GlobalDecl Stmt
+                | GlobalFunc FunStmt
+  deriving (Show, Eq)
+
 data FunStmt = FunStmt FunSig Block PrimType
   deriving (Show, Eq)
 
@@ -64,6 +70,7 @@ data Expr =
   | EBool Bool
   | EIdentifier Name
   | EArrIdentifier Name Expr
+  | EMapIdentifier Name Expr
   | EBinop Op Expr Expr
   | EFunCall String [Expr]
   | EArray [Expr]

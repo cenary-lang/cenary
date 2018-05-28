@@ -38,19 +38,24 @@ import           Ivy.Register
 
 -- | Class of monads that are able to read and update context
 class ContextM m where
-  updateCtx :: (Context -> Context) -> m ()
+  updateCtx :: (Context -> (Bool, Context)) -> m ()
   lookup :: String -> m (VariableStatus VarsVar)
   lookupFun :: String -> m (VariableStatus VarsFun)
   createCtx :: m ()
   popCtx :: m ()
   updateSig :: Sig -> m ()
+  ctxDeclareVar :: Name -> PrimType -> VariablePersistence -> m ()
+  ctxDefineVar :: Name -> Integer -> m ()
+  ctxDefineFunc :: Name -> PrimType -> Integer -> m ()
 
 instance ContextM Evm where
-  updateCtx f =
-    env %= (contexts %~ updateCtx')
+  updateCtx f' =
+    env %= (contexts %~ updateCtx' f')
       where
-        updateCtx' []       = []
-        updateCtx' (ctx:xs) = f ctx : xs
+        updateCtx' _ []       = []
+        updateCtx' f (ctx:xs) = case f ctx of
+          (True, newCtx) -> newCtx : xs
+          (False, oldCtx) -> oldCtx : updateCtx' f xs
   lookup name =
     go =<< _contexts <$> use env
     where
@@ -58,12 +63,12 @@ instance ContextM Evm where
       go [] = return NotDeclared
       go (ctx:xs) =
         case M.lookup name ctx of
-          Just (varTy, VarAddr varAddr) -> decideVar (varTy, varAddr)
+          Just (varTy, VarAddr varAddr persistence) -> decideVar (varTy, varAddr) persistence
           Just _ -> throwError $ InternalError $ "Another case for context (1)"
           Nothing -> go xs
         where
-          decideVar (ty, Nothing)   = return (Decl ty)
-          decideVar (ty, Just addr) = return (Def ty addr)
+          decideVar (ty, Nothing)   p = return (Decl ty p)
+          decideVar (ty, Just addr) p = return (Def ty addr p)
   lookupFun name =
     go =<< _contexts <$> use env
       where
@@ -76,6 +81,34 @@ instance ContextM Evm where
   createCtx = env %= (contexts %~ (M.empty :))
   popCtx = env %= (contexts %~ tail)
   updateSig sig' = env %= (sig .~ sig')
+  ctxDeclareVar name ty persistence =
+    lookup name >>= \case
+      NotDeclared -> do
+        updateCtx ((True,) . M.insert name (ty, VarAddr Nothing persistence))
+        case ty of
+          TMap _ _ -> do
+            addr <- alloc persistence
+            createMappingOrder name
+            ctxDefineVar name addr
+          _ -> pure ()
+        
+      Decl _ _ ->
+        throwError $ InternalError $ "TODO (2)"
+      Def _ _ _ ->
+        throwError $ InternalError $ "TODO (3)"
+  ctxDefineVar name addr =
+    lookup name >>= \case
+      NotDeclared -> throwError (VariableNotDeclared name (TextDetails "ctxDefineVar"))
+      Decl tyL persistence -> do
+        updateCtx $ \ctx ->
+          case M.lookup name ctx of
+            Nothing ->
+              (False, ctx)
+            Just _ ->
+              (True, M.update (const (Just (tyL, VarAddr (Just addr) persistence))) name ctx)
+      Def _ _ _ -> throwError $ InternalError $ "TODO (1)"
+  ctxDefineFunc name retTy funPc =
+    updateCtx ((True,) . M.insert name (TFun retTy, FunAddr funPc))
 
 -- | Class of monads that can perform typechecking
 class TcM m where
@@ -89,10 +122,6 @@ binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> m Operand
 binOp t op = do
   -- We should have addresses of left and right operands, in this order by now.
   op
-  addr <- alloc
-  push addr
-  store
-  load addr
   return (Operand t)
 
 executeBlock :: CodegenM m => Block -> m ()
@@ -109,28 +138,29 @@ assignFromStack
 assignFromStack tyR name =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
-    Decl tyL -> do
+    Decl tyL persistence -> do
       checkTyEq name tyL tyR
-      addr <- alloc
+      addr <- alloc persistence
       push32 addr
-      mstore
-      updateCtx (M.update (const (Just (tyL, VarAddr (Just addr)))) name)
-    Def tyL oldAddr -> do
+      store' persistence
+      ctxDefineVar name addr
+    Def tyL oldAddr persistence -> do
       checkTyEq name tyL tyR
       push32 oldAddr
-      store
+      store' persistence
 
 declVar
   :: (MonadState CodegenState m, ContextM m, MonadError CodegenError m, MemoryM m)
   => PrimType
   -> Name
+  -> VariablePersistence
   -> m ()
-declVar ty name =
+declVar ty name persistence =
   lookup name >>= \case
-    Decl _ -> throwError (VariableAlreadyDeclared name)
-    Def _ _ -> throwError (VariableAlreadyDeclared name)
+    Decl _ _ -> throwError (VariableAlreadyDeclared name)
+    Def _ _ _ -> throwError (VariableAlreadyDeclared name)
     NotDeclared -> do
-      updateCtx (M.insert name (ty, VarAddr Nothing))
+      ctxDeclareVar name ty persistence
 
 codegenStmt :: forall m. CodegenM m => Stmt -> m ()
 codegenStmt (SWhile pred block) = do
@@ -166,6 +196,27 @@ codegenStmt (SAssignment name val) = do
   Operand tyR <- codegenExpr val
   assignFromStack tyR name
 
+codegenStmt (SMapAssignment name key valExpr) = do
+  Operand tyR <- codegenExpr valExpr 
+  -- [RHSVal]
+  lookup name >>= \case
+    NotDeclared ->
+      throwError (VariableNotDeclared name (TextDetails "SMapAssignment"))
+    Decl _ _ ->
+      throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
+    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+      checkTyEq name tyAnnotVal tyR
+      Operand tyKey <- codegenExpr key
+      -- [RHSVal, KeyVal]
+      checkTyEq (name <> "_key") tyAnnotKey tyKey
+      lookupMappingOrder name >>= \case
+        Nothing ->
+          throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
+        Just order -> do
+          -- [RHSVal, KeyVal]
+          applyHashingFunction True order persistence tyKey -- [RHSVal, SHA]
+          store' persistence
+
 codegenStmt stmt@(SArrAssignment name index val) = do
   offset <- use funcOffset
 
@@ -178,14 +229,14 @@ codegenStmt stmt@(SArrAssignment name index val) = do
   -- [1, 5]
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
-    Decl _tyL -> throwError (NonInitializedArrayAccess name)
-    Def (TArray aTy) addr -> do
+    Decl _tyL _ -> throwError (NonInitializedArrayAccess name)
+    Def (TArray aTy) addr persistence -> do
       checkTyEq name aTy tyR
-      load addr -- [1, 5, 340]
+      load addr persistence -- [1, 5, 340]
       -- Size check
       dup3 -- [1, 5, 340, 1]
       dup2 -- [1, 5, 340, 1, 340]
-      mload -- [1, 5, 340, 1, 3]
+      load' persistence -- [1, 5, 340, 1, 3]
       branchIf
         offset
         (push32 0x01 >> swap1 >> sub >> lt)
@@ -198,10 +249,10 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       add -- [1, 5, 380]
       mstore -- [1]
       pop -- []
-    Def ty _ -> throwError (IllegalArrAccess name ty)
+    Def ty _ _ -> throwError (IllegalArrAccess name ty)
 
 codegenStmt (SVarDecl ty name) =
-  declVar ty name
+  declVar ty name Temporary
 
 codegenStmt (SDeclAndAssignment ty name val) = do
   codegenStmt (SVarDecl ty name)
@@ -229,45 +280,90 @@ codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
                (executeBlock trueBlock)
                (executeBlock falseBlock)
 
+codegenStmt (SReturn retExpr) =
+  void (codegenExpr retExpr)
+
+codegenStmt (SExpr expr) = void (codegenExpr expr)
+
 codegenStmt stmt@(SResize name sizeExpr) = do
   Operand tySize <- codegenExpr sizeExpr
   checkTyEq ("resize_" <> name) tySize TInt
-  -- [4]
-
-  offset <- use funcOffset
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
-    Decl _tyL -> throwError (NonInitializedArrayResize name)
-    Def (TArray aTy) addr -> do
-      load addr -- [NewSize, StackAddr]
-      branchIfElse (offset)
-                   (do
-                     swap1 -- [StackAddr, NewSize]
-                     dup2 -- [StackAddr, NewSize, StackAddr]
-                     dup2 -- [StackAddr, NewSize, StackAddr, NewSize]
-                     swap1 -- [StackAddr, NewSize, NewSize, StackAddr]
-                     mload -- [StackAddr, NewSize, NewSize, OldHeapAddr]
-                     mload -- [StackAddr, NewSize, NewSize, OldSize]
-                     lt -- [StackAddr, NewSize, OldSize < NewSize]
-                   )
-                   -- new size is bigger, allocate new array space
-                   -- [StackAddr, NewSize] | NewSize > OldSize
-                   (moveToNewArrAddr offset)
-                   -- [StackAddr, NewSize] | NewSize <= OldSize
-                   (swap1 >> mstore) -- new size is smaller, just set the length identifier address
+    Decl _tyL _ -> throwError (NonInitializedArrayResize name)
+    Def (TArray _) addr persistence -> do
+      push32 addr -- [NewSize, StackAddr]
+      swap1 -- [StackAddr, NewSize]
+      startResizingProcedure persistence -- []
+    Def ty _ _ -> do
+      throwError $ CannotResizeNonArray ty
+
+-- | This type alias will be used for top-level codegen, since
+-- at top level we use all contexts
+type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
+
+log :: CodegenM m => m ()
+log = do
+  -- [val]
+  dup1 -- [val, val]
+  shaAddr <- alloc Temporary
+  push32 shaAddr -- [val, val, addr]
+  mstore -- [val]
+  push32 0x20 -- [val, 0x20]
+  push32 shaAddr -- [val, 0x20, addr]
+  log0 -- [val]
+
+logContents :: VariablePersistence -> CodegenM m => m ()
+logContents persistence = do
+  dup1 >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  log
+  pop
+
+logContents' :: VariablePersistence -> CodegenM m => m ()
+logContents' persistence = do
+  dup1 >> load' persistence >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  log
+  pop
+
+-- |
+-- Input: [StackAddr, NewSize]
+-- Output: []
+startResizingProcedure
+  :: forall m. CodegenM m
+  => VariablePersistence
+  -> m ()
+startResizingProcedure persistence = do
+  offset <- use funcOffset
+  branchIfElse
+    (offset)
+    (do
+      dup2 -- [StackAddr, NewSize, StackAddr]
+      dup2 -- [StackAddr, NewSize, StackAddr, NewSize]
+      swap1 -- [StackAddr, NewSize, NewSize, StackAddr]
+      load' persistence -- [StackAddr, NewSize, NewSize, OldHeapAddr]
+      load' persistence -- [StackAddr, NewSize, NewSize, OldSize]
+      lt -- [StackAddr, NewSize, OldSize < NewSize]
+    )
+    -- new size is bigger, allocate new array space
+    -- [StackAddr, NewSize] | NewSize > OldSize
+    (moveToNewArrAddr offset persistence)
+    -- [StackAddr, NewSize] | NewSize <= OldSize
+    (swap1 >> load' persistence >> store' persistence) -- new size is smaller, just set the length identifier address
   where
-    moveToNewArrAddr :: Integer -> m ()
-    moveToNewArrAddr offset = do
+    moveToNewArrAddr :: Integer -> VariablePersistence -> m ()
+    moveToNewArrAddr offset persistence = do
       -- [StackAddr, NewSize]
       rec heapBegin <- use heapSpaceBegin
           push32 heapBegin
-          mload -- [StackAddr, NewSize, NewAddr]
+          load' persistence -- [StackAddr, NewSize, NewAddr]
           swap1 -- [StackAddr, NewAddr, NewSize]
           dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
-          mstore -- [StackAddr, NewAddr]
+          store' persistence -- [StackAddr, NewAddr]
           swap1 -- [NewAddr, StackAddr]
-          dup1 >> mload -- [NewAddr, StackAddr, OldAddr]
-          dup1 >> mload -- [NewAddr, StackAddr, OldAddr, OldSize]
+          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
+          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
+
+          swap3 >> inc 0x20 >> swap3
 
           loopBegin <- jumpdest
 
@@ -284,14 +380,14 @@ codegenStmt stmt@(SResize name sizeExpr) = do
           dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1] (index indicated by oldSize)
           dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1, oldSize - 1]
           (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1)]
-          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
+          dup4 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
           add -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1) + oldAddr]
-          mload -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
+          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
           swap1 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], oldSize - 1]
           (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1)]
           dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1), NewAddr]
           add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1) + NewAddr]
-          mstore -- [NewAddr, StackAddr, OldAddr, OldSize]
+          store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
           dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
 
           -- Jump back to beginning of loop
@@ -302,24 +398,17 @@ codegenStmt stmt@(SResize name sizeExpr) = do
           loopEnd <- jumpdest
           -- [NewAddr, StackAddr, OldAddr, 0]
           (pop >> pop) -- [NewAddr, StackAddr]
-          mstore -- []
+          swap1 >> dec 0x20 >> swap1
+          -- swap1 >> inc 0x20 >> logContents Temporary >> dec 0x20 >> swap1
+          store' persistence -- []
       pure ()
-
-codegenStmt (SReturn retExpr) =
-  void (codegenExpr retExpr)
-
-codegenStmt (SExpr expr) = void (codegenExpr expr)
-
--- | This type alias will be used for top-level codegen, since
--- at top level we use all contexts
-type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
 putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgInfo -> m ()
 putFnArgsToContext = traverse_ register_arg
   where
     register_arg :: FuncRegistryArgInfo -> m ()
     register_arg (FuncRegistryArgInfo ty name) = do
-      declVar ty name
+      declVar ty name Temporary
       assignFromStack ty name
 
 sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m b
@@ -376,7 +465,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
       checkTyEq "function definition" retTyAnnot retTy
       functionOut <- jumpdest
-  updateCtx (M.insert name (TFun retTy, FunAddr funPc))
+  ctxDefineFunc name retTy funPc
   return ()
   where
     executeFunBlock :: forall m. CodegenM m => Block -> m Operand
@@ -393,7 +482,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
                 swap1
                 jump
               externalCall = do
-                addr <- alloc
+                addr <- alloc Temporary
                 push32 addr
                 mstore
                 push32 (addr + 0x20)
@@ -426,7 +515,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
     storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
     storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
-      argAddr <- alloc
+      argAddr <- alloc Temporary
       -- Fill arg addresses with incoming values from the call
       push32 calldataOffset
       calldataload
@@ -501,9 +590,9 @@ codegenExpr (EFunCall name args) =
 codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
-    Decl _ -> throwError (VariableNotDefined name)
-    Def ty addr -> do
-      load addr
+    Decl _ _ -> throwError (VariableNotDefined name)
+    Def ty addr persistence -> do
+      load addr persistence
       return (Operand ty)
 
 codegenExpr (EArrIdentifier name index) = do
@@ -511,20 +600,20 @@ codegenExpr (EArrIdentifier name index) = do
   lookup name >>= \case
     NotDeclared ->
       throwError (VariableNotDeclared name (TextDetails "in array assignment"))
-    Decl _ ->
+    Decl _ _ ->
       throwError (VariableNotDefined name)
-    Def (TArray ty) addr -> do
+    Def (TArray ty) addr persistence -> do
       Operand indexTy <- codegenExpr index
       -- a[2]
       checkTyEq name TInt indexTy
 
       push32 addr
-      mload -- [2, 160]
+      load' persistence -- [2, 160]
 
       -- Runtime check for array bounds
       dup2 -- [2, 160, 2]
       dup2 -- [2, 160, 2, 160]
-      mload -- [2, 160, 2, 1]
+      load' persistence -- [2, 160, 2, 1]
       branchIf
         offset
         (push32 0x01 >> swap1 >> sub >> lt)
@@ -537,10 +626,10 @@ codegenExpr (EArrIdentifier name index) = do
       push32 0x20
       mul
       add
-      mload
+      load' persistence
 
       return (Operand ty)
-    Def ty _ -> throwError (IllegalArrAccess name ty)
+    Def ty _ _ -> throwError (IllegalArrAccess name ty)
 
 codegenExpr (EInt val) = do
   push32 val
@@ -576,7 +665,7 @@ codegenExpr (EBinop binop expr1 expr2) = do
 codegenExpr (EArray elemExprs) = do
   elems <- mapM codegenExpr (reverse elemExprs)
   elemTy <- testOperandsSameTy elems
-  arrAddr <- alloc
+  arrAddr <- alloc Temporary
 
   heapBegin <- use heapSpaceBegin
   push32 heapBegin -- [3, 2, 1, 360]
@@ -594,7 +683,7 @@ codegenExpr (EArray elemExprs) = do
   swap1 -- [3, 2, 1, 420, 3, 420]
   mstore -- [3, 2, 1, 420]
   inc 0x20 -- [3, 2, 1, 440]
-  replicateM (length elemExprs) $ do
+  replicateM_ (length elemExprs) $ do
     swap1 -- [3, 2, 440, 1]
     dup2 -- [3, 2, 440, 1, 440]
     mstore -- [3, 2, 440]
@@ -621,7 +710,88 @@ codegenExpr (EArray elemExprs) = do
         then testOperandsHasTy ty xs
         else throwError (ArrayElementsTypeMismatch ty (x ^. operandType))
 
-codegenPhases :: CodegenM m => [FunStmt] -> m ()
+codegenExpr (EMapIdentifier name key) = do
+  lookup name >>= \case
+    NotDeclared ->
+      throwError (VariableNotDeclared name (TextDetails "EMapIdentifier"))
+    Decl _ _ ->
+      throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
+    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+      Operand tyKey <- codegenExpr key
+      checkTyEq name tyAnnotKey tyKey
+      lookupMappingOrder name >>= \case
+        Nothing ->
+          throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
+        Just order -> do
+          -- [KeyValue]
+          applyHashingFunction False order persistence tyKey -- [SHA]
+          load' persistence
+          return (Operand tyAnnotVal)
+
+applyHashingFunction :: CodegenM m => Bool -> Integer -> VariablePersistence -> PrimType -> m ()
+applyHashingFunction shouldLog order persistence = \case
+  TInt -> do
+    -- [Value]
+    valAddr <- alloc Temporary
+    orderAddr <- alloc Temporary
+    push32 valAddr -- [Value, ValAddr]
+    store' Temporary -- []
+    push32 order -- [Order]
+    push32 orderAddr -- [Order, OrderAddr]
+    store' Temporary -- []
+    push32 0x40 -- [40]
+    push32 valAddr -- [40, ValAddr]
+    sha3 -- This instruction only works inside memory, not storage, unfortunately.
+  TArray _ ->  do
+    -- [HeapAddr]
+    stackAddr <- alloc Temporary
+    push32 stackAddr -- [HeapAddr, StackAddr]
+    store' Temporary -- []
+    push32 stackAddr -- [StackAddr]
+
+    dup1 >> load' Temporary -- [StackAddr, HeapAddr]
+    load' Temporary -- [StackAddr, ArrLength]
+    inc 0x01 -- [StackAddr, ArrLength + 1]
+    dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
+    swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
+    dup1 -- [ArrLength + 1, ArrLength + 1, StackAddr, StackAddr]
+    swap2 -- [ArrLength + 1, StackAddr, StackAddr, ArrLength + 1]
+    startResizingProcedure Temporary -- [ArrLength + 1, StackAddr]
+    swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
+    load' Temporary -- [StackAddr, ArrLength + 1, HeapAddr]
+    dup2 -- [StackAddr, ArrLength + 1, HeapAddr, ArrLength + 1]
+    push32 0x20 >> mul -- [StackAddr, ArrLength + 1, HeapAddr, 0x20 * (ArrLength + 1)]
+    add -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1)]
+    push32 order -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1), Order]
+    swap1 -- [StackAddr, ArrLength + 1, Order, HeapAddr + 0x20 * (ArrLength + 1)]
+    store' Temporary -- [StackAddr, ArrLength + 1]
+    inc 0x01
+    push32 0x20 >> mul -- [StackAddr, (ArrLength + 2) * 0x20]
+    swap1 -- [(ArrLength + 2) * 0x20, StackAddr]
+    load' Temporary -- [(ArrLength + 2) * 0x20, HeapAddr]
+    sha3 -- [SHA3]
+
+lookupMappingOrder
+  :: MonadState CodegenState m
+  => Name
+  -> m (Maybe Integer)
+lookupMappingOrder name =
+  M.lookup name <$> use mappingOrder
+
+createMappingOrder
+  :: (MonadState CodegenState m, MonadError CodegenError m)
+  => Name
+  -> m ()
+createMappingOrder name = do
+  nextOrder <- nextMappingOrder <<+= 1
+  currentMappingOrder <- use mappingOrder
+  case M.lookup name currentMappingOrder of
+    Nothing ->
+      mappingOrder %= M.insert name nextOrder
+    Just _ ->
+      throwError $ InternalError $ "Multiple mapping order insert attempts for mapping named " <> name
+
+codegenPhases :: CodegenM m => AST -> m ()
 codegenPhases functions = do
   rec initPhase (afterFunctions - afterInit)
       afterInit <- use pc
@@ -643,9 +813,18 @@ initPhase functionCosts = do
       initCost <- use pc
   pure ()
 
+codegenGlobalStmt :: CodegenM m => GlobalStmt -> m ()
+codegenGlobalStmt (GlobalFunc funStmt) = codegenFunDef funStmt
+codegenGlobalStmt (GlobalDecl stmt) =
+  case stmt of
+    SVarDecl ty name -> declVar ty name Permanent
+
+    -- TODO: Make this a user error, not an internal one
+    _ -> throwError $ InternalError "Only declarations are allowed at global scope"
+
 bodyPhase
   :: CodegenM m
-  => [FunStmt]
+  => AST
   -> m ()
 bodyPhase stmts = do
   -- We use first 32 bytes (between 0x00 and 0x20) to determine 
@@ -656,6 +835,6 @@ bodyPhase stmts = do
       push32 (heapSpaceBegin' + 0x20)
       push32 heapSpaceBegin'
       mstore
-      traverse_ codegenFunDef stmts
+      traverse_ codegenGlobalStmt stmts
       heapSpaceBegin' <- use stackMemEnd
   pure ()

@@ -19,6 +19,8 @@ module Ivy.EvmAPI.API
   , mload
   , mstore
   , mstore8
+  , sload
+  , sstore
   , jump
   , jumpi
   , codecopy
@@ -32,6 +34,8 @@ module Ivy.EvmAPI.API
   , dup6
   , swap1
   , swap2
+  , swap3
+  , swap4
   , log0
   , log1
   , log2
@@ -43,6 +47,7 @@ module Ivy.EvmAPI.API
   , generateByteCode
   , inc
   , dec
+  , sha3
   ) where
 
 import           Control.Lens hiding (op)
@@ -70,6 +75,8 @@ toOpcode = \case
   MLOAD        -> (0x51, 1)
   MSTORE       -> (0x52, 1)
   MSTORE8      -> (0x53, 1)
+  SLOAD        -> (0x54, 1)
+  SSTORE       -> (0x55, 1)
   JUMP         -> (0x56, 1)
   JUMPI        -> (0x57, 1)
   JUMPDEST     -> (0x5b, 1)
@@ -87,11 +94,14 @@ toOpcode = \case
   DUP6         -> (0x85, 1)
   SWAP1        -> (0x90, 1)
   SWAP2        -> (0x91, 1)
+  SWAP3        -> (0x92, 1)
+  SWAP4        -> (0x93, 1)
   LOG0         -> (0xA0, 1)
   LOG1         -> (0xA1, 1)
   LOG2         -> (0xA2, 1)
   RETURN       -> (0xf3, 1)
   ADDRESS      -> (0x30, 1)
+  SHA3         -> (0x20, 1)
 
 -- | Class of monads that can run opcodes
 class Monad m => OpcodeM m where
@@ -103,7 +113,7 @@ instance OpcodeM Evm where
     pc += cost
     program %= (addInstr instr)
 
-stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, log0, log1, log2, op_return, address :: OpcodeM m => m ()
+stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, sload, sstore, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, swap3, swap4, log0, log1, log2, op_return, address, sha3 :: OpcodeM m => m ()
 
 stop         = op STOP
 add          = op ADD
@@ -119,6 +129,8 @@ pop          = op POP
 mload        = op MLOAD
 mstore       = op MSTORE
 mstore8      = op MSTORE8
+sload        = op SLOAD
+sstore       = op SSTORE
 jump         = op JUMP
 jumpi        = op JUMPI
 codecopy     = op CODECOPY
@@ -132,11 +144,14 @@ dup5         = op DUP5
 dup6         = op DUP6
 swap1        = op SWAP1
 swap2        = op SWAP2
+swap3        = op SWAP3
+swap4        = op SWAP4
 log0         = op LOG0
 log1         = op LOG1
 log2         = op LOG2
 op_return    = op RETURN
 address      = op ADDRESS
+sha3         = op SHA3
 
 push1 :: OpcodeM m => Integer -> m ()
 push1 = op . PUSH1

@@ -35,7 +35,7 @@ import qualified Ivy.Syntax as S
 import           Ivy.Utils.EvmAsm (asm)
 ------------------------------------------------------
 
-codegen :: Monad m => CodegenState -> [S.FunStmt] -> ExceptT Error m T.Text
+codegen :: Monad m => CodegenState -> S.AST -> ExceptT Error m T.Text
 codegen initState functions =
   fmap (T.pack . generateByteCode . _program)
     $ hoistEither
@@ -75,11 +75,14 @@ initCodegenState =
   CodegenState
     { _heapSpaceBegin   = 0
     , _stackMemEnd      = 0
+    , _stackStorageEnd  = 0
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
     , _funcRegistry     = FuncRegistry M.empty
     , _program          = initProgram
     , _funcOffset       = 0
+    , _mappingOrder     = M.empty
+    , _nextMappingOrder = 0
     }
 
 data Environment =

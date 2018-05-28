@@ -1,21 +1,26 @@
 int read() {
   int[] a = { 3, 4, 5, 6 };
-  return a[3];
-}
+  resize(a, 3);
+  return a[2];
+};
 
 int write(int val) {
   int[] a = { 1, 2 };
+  resize(a, 5);
   a[1] = val;
   return a[1];
-}
+};
 
 int out_of_bounds_read() {
   int[] a = { 1 };
-  return a[2];
-}
+  resize(a, 3);
+  a[3] = 99;
+  return a[0];
+};
 
 int out_of_bounds_write() {
   int[] a = { 1 };
-  a[2] = 3;
+  resize(a, 3);
+  a[3] = 3;
   return 5;
-}
+};
