@@ -37,9 +37,9 @@ function rewind-deploy {
 }
 
 function compute {
-  if ! [[ $2 ]]; then
-    start_testrpc
-  fi
+  # if ! [[ $2 ]]; then
+  #   # start_testrpc
+  # fi
   DEPLOYMENT_JS=deployment/deployment.current.js
   compile true
   deploy $1
@@ -48,14 +48,15 @@ function compute {
     exit 1
   else
     function_name="${2:-main()}"
+    echo "Executing: $function_name"
     sed -i '' s/@call@/"$function_name"/ "$DEPLOYMENT_JS"
     node "$DEPLOYMENT_JS"
     rewind-deploy $1
   fi
 
-  if ! [[ $2 ]]; then
-    start_testrpc
-  fi
+  # if ! [[ $2 ]]; then
+  #   # kill_testrpc
+  # fi
 }
 
 function blue {
@@ -79,6 +80,7 @@ function test {
     assertion_text="${ASSERTIONS[$i + 1]}"
     function_call="${ASSERTIONS[$i + 2]}"
     blue "Testing file $filename"
+    echo "Test Executing: $function_call"
     output=$(compute ./test/sources/"$filename" "$function_call" 2>&1)
     if echo $output | grep -q "$assertion_text"; then
       green "OK"
@@ -95,7 +97,7 @@ function test {
 
 function start_testrpc {
   if ! [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
-    testrpc 1>/dev/null &
+    testrpc --gasLimit 90000000 --gasPrice 1 1>/dev/null &
   fi
 }
 

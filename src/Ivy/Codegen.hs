@@ -196,8 +196,26 @@ codegenStmt (SAssignment name val) = do
   Operand tyR <- codegenExpr val
   assignFromStack tyR name
 
-codegenStmt (SMapAssignment _name _key _val) =
-  undefined -- TODO: fill
+codegenStmt (SMapAssignment name key valExpr) = do
+  Operand tyR <- codegenExpr valExpr 
+  -- [RHSVal]
+  lookup name >>= \case
+    NotDeclared ->
+      throwError (VariableNotDeclared name (TextDetails "SMapAssignment"))
+    Decl _ _ ->
+      throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
+    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+      checkTyEq name tyAnnotVal tyR
+      Operand tyKey <- codegenExpr key
+      -- [RHSVal, KeyVal]
+      checkTyEq (name <> "_key") tyAnnotKey tyKey
+      lookupMappingOrder name >>= \case
+        Nothing ->
+          throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
+        Just order -> do
+          -- [RHSVal, KeyVal]
+          applyHashingFunction True order persistence tyKey -- [RHSVal, SHA]
+          store' persistence
 
 codegenStmt stmt@(SArrAssignment name index val) = do
   offset <- use funcOffset
@@ -274,10 +292,9 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL _ -> throwError (NonInitializedArrayResize name)
     Def (TArray _) addr persistence -> do
-      load addr persistence -- [NewSize, StackAddr]
+      push32 addr -- [NewSize, StackAddr]
       swap1 -- [StackAddr, NewSize]
-      startResizingProcedure persistence -- [StackAddr]
-      pop
+      startResizingProcedure persistence -- []
     Def ty _ _ -> do
       throwError $ CannotResizeNonArray ty
 
@@ -285,11 +302,34 @@ codegenStmt stmt@(SResize name sizeExpr) = do
 -- at top level we use all contexts
 type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
 
+log :: CodegenM m => m ()
+log = do
+  -- [val]
+  dup1 -- [val, val]
+  shaAddr <- alloc Temporary
+  push32 shaAddr -- [val, val, addr]
+  mstore -- [val]
+  push32 0x20 -- [val, 0x20]
+  push32 shaAddr -- [val, 0x20, addr]
+  log0 -- [val]
+
+logContents :: VariablePersistence -> CodegenM m => m ()
+logContents persistence = do
+  dup1 >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  log
+  pop
+
+logContents' :: VariablePersistence -> CodegenM m => m ()
+logContents' persistence = do
+  dup1 >> load' persistence >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  log
+  pop
+
 -- |
 -- Input: [StackAddr, NewSize]
--- Output: [StackAddr]
+-- Output: []
 startResizingProcedure
-  :: forall m. (MemoryM m, OpcodeM m, MonadState CodegenState m, MonadFix m)
+  :: forall m. CodegenM m
   => VariablePersistence
   -> m ()
 startResizingProcedure persistence = do
@@ -308,7 +348,7 @@ startResizingProcedure persistence = do
     -- [StackAddr, NewSize] | NewSize > OldSize
     (moveToNewArrAddr offset persistence)
     -- [StackAddr, NewSize] | NewSize <= OldSize
-    (swap1 >> mstore) -- new size is smaller, just set the length identifier address
+    (swap1 >> load' persistence >> store' persistence) -- new size is smaller, just set the length identifier address
   where
     moveToNewArrAddr :: Integer -> VariablePersistence -> m ()
     moveToNewArrAddr offset persistence = do
@@ -318,10 +358,12 @@ startResizingProcedure persistence = do
           load' persistence -- [StackAddr, NewSize, NewAddr]
           swap1 -- [StackAddr, NewAddr, NewSize]
           dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
-          mstore -- [StackAddr, NewAddr]
+          store' persistence -- [StackAddr, NewAddr]
           swap1 -- [NewAddr, StackAddr]
-          dup1 >> mload -- [NewAddr, StackAddr, OldAddr]
-          dup1 >> mload -- [NewAddr, StackAddr, OldAddr, OldSize]
+          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
+          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
+
+          swap3 >> inc 0x20 >> swap3
 
           loopBegin <- jumpdest
 
@@ -338,14 +380,14 @@ startResizingProcedure persistence = do
           dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1] (index indicated by oldSize)
           dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1, oldSize - 1]
           (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1)]
-          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
+          dup4 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
           add -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1) + oldAddr]
-          mload -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
+          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
           swap1 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], oldSize - 1]
           (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1)]
           dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1), NewAddr]
           add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1) + NewAddr]
-          mstore -- [NewAddr, StackAddr, OldAddr, OldSize]
+          store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
           dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
 
           -- Jump back to beginning of loop
@@ -356,9 +398,9 @@ startResizingProcedure persistence = do
           loopEnd <- jumpdest
           -- [NewAddr, StackAddr, OldAddr, 0]
           (pop >> pop) -- [NewAddr, StackAddr]
-          swap1 -- [StackAddr, NewAddr]
-          dup2 -- [StackAddr, NewAddr, StackAddr]
-          mstore -- [StackAddr]
+          swap1 >> dec 0x20 >> swap1
+          -- swap1 >> inc 0x20 >> logContents Temporary >> dec 0x20 >> swap1
+          store' persistence -- []
       pure ()
 
 putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgInfo -> m ()
@@ -680,55 +722,54 @@ codegenExpr (EMapIdentifier name key) = do
       lookupMappingOrder name >>= \case
         Nothing ->
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
-        Just order ->
-          case tyKey of
-            TInt -> do
-              -- [StackAddr]
-              load' persistence -- [Value]
-              valAddr <- alloc persistence
-              orderAddr <- alloc persistence
-              push32 valAddr -- [Value, ValAddr]
-              store' persistence -- []
-              push32 order -- [Order]
-              push32 orderAddr -- [Order, OrderAddr]
-              store' persistence -- []
-              push32 (valAddr + 0x40)
-              push32 valAddr
-              sha3
-              load' persistence
-              return (Operand tyAnnotVal)
-            TArray _ ->  do
-              -- [ArrAddr]
-              stackAddr <- alloc persistence
-              push32 stackAddr -- [ArrAddr, StackAddr]
-              store' persistence -- []
-              push32 stackAddr -- [StackAddr]
+        Just order -> do
+          -- [KeyValue]
+          applyHashingFunction False order persistence tyKey -- [SHA]
+          load' persistence
+          return (Operand tyAnnotVal)
 
-              dup1 >> load' persistence -- [StackAddr, ArrAddr]
-              load' persistence -- [StackAddr, ArrLength]
-              inc 0x01 -- [StackAddr, ArrLength + 1]
-              dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
-              swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
-              swap1 -- [ArrLength + 1, StackAddr, ArrLength + 1]
-              startResizingProcedure persistence -- [ArrLength + 1, StackAddr]
-              swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
-              load' persistence -- [StackAddr, ArrLength + 1, ArrAddr]
-              dup2 -- [StackAddr, ArrLength + 1, ArrAddr, ArrLength + 1]
-              push32 0x20 >> mul -- [StackAddr, ArrLength + 1, ArrAddr, 0x20 * (ArrLength + 1)]
-              add -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * (ArrLength + 1)]
-              push32 order -- [StackAddr, ArrLength + 1, ArrAddr + 0x20 * (ArrLength + 1), Order]
-              swap1 -- [StackAddr, ArrLength + 1, Order, ArrAddr + 0x20 * (ArrLength + 1)]
-              store' persistence -- [StackAddr, ArrLength + 1]
-              push32 0x20 >> mul -- [StackAddr, (ArrLength + 1) * 0x20]
-              swap1 -- [(ArrLength + 1) * 0x20, StackAddr]
-              load' persistence -- [(ArrLength + 1) * 0x20, ArrAddr]
-              swap1 >> dup2 -- [ArrAddr, (ArrLength + 1) * 0x20, ArrAddr]
-              add -- [ArrAddr, (ArrLength + 1) * 0x20 + ArrAddr]
-              inc 0x20 -- [ArrAddr, (ArrLength + 2) * 0x20 + ArrAddr]
-              swap1 -- [(ArrLength + 2) * 0x20 + ArrAddr, ArrAddr]
-              sha3 -- [SHA3]
-              load' persistence -- [Value]
-              return (Operand tyAnnotVal)
+applyHashingFunction :: CodegenM m => Bool -> Integer -> VariablePersistence -> PrimType -> m ()
+applyHashingFunction shouldLog order persistence = \case
+  TInt -> do
+    -- [Value]
+    valAddr <- alloc Temporary
+    orderAddr <- alloc Temporary
+    push32 valAddr -- [Value, ValAddr]
+    store' Temporary -- []
+    push32 order -- [Order]
+    push32 orderAddr -- [Order, OrderAddr]
+    store' Temporary -- []
+    push32 0x40 -- [40]
+    push32 valAddr -- [40, ValAddr]
+    sha3 -- This instruction only works inside memory, not storage, unfortunately.
+  TArray _ ->  do
+    -- [HeapAddr]
+    stackAddr <- alloc Temporary
+    push32 stackAddr -- [HeapAddr, StackAddr]
+    store' Temporary -- []
+    push32 stackAddr -- [StackAddr]
+
+    dup1 >> load' Temporary -- [StackAddr, HeapAddr]
+    load' Temporary -- [StackAddr, ArrLength]
+    inc 0x01 -- [StackAddr, ArrLength + 1]
+    dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
+    swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
+    dup1 -- [ArrLength + 1, ArrLength + 1, StackAddr, StackAddr]
+    swap2 -- [ArrLength + 1, StackAddr, StackAddr, ArrLength + 1]
+    startResizingProcedure Temporary -- [ArrLength + 1, StackAddr]
+    swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
+    load' Temporary -- [StackAddr, ArrLength + 1, HeapAddr]
+    dup2 -- [StackAddr, ArrLength + 1, HeapAddr, ArrLength + 1]
+    push32 0x20 >> mul -- [StackAddr, ArrLength + 1, HeapAddr, 0x20 * (ArrLength + 1)]
+    add -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1)]
+    push32 order -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1), Order]
+    swap1 -- [StackAddr, ArrLength + 1, Order, HeapAddr + 0x20 * (ArrLength + 1)]
+    store' Temporary -- [StackAddr, ArrLength + 1]
+    inc 0x01
+    push32 0x20 >> mul -- [StackAddr, (ArrLength + 2) * 0x20]
+    swap1 -- [(ArrLength + 2) * 0x20, StackAddr]
+    load' Temporary -- [(ArrLength + 2) * 0x20, HeapAddr]
+    sha3 -- [SHA3]
 
 lookupMappingOrder
   :: MonadState CodegenState m

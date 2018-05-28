@@ -1,13 +1,12 @@
-int a;
-mapping[char[]][int] myMap;
-
-int yihu() {
-  return 0;
-};
+int c;
+mapping[char[]][int] address;
 
 int main() {
-  int wow = myMap{"yigit"};
-  a = 3;
-  int b = a + 8;
-  return wow;
+  char[] person1 = "yigit";
+  char[] person2 = "ahmet";
+
+  address{"mehmet"} = 5;
+  address{person1} = 3;
+  address{person2} = 9;
+  return address{"mehmet"} + address{person1};
 };
