@@ -1,6 +1,8 @@
 #!/bin/bash
 
-ASSERTIONS=( Resizing.ivy "5" "read()"
+ASSERTIONS=( Hashmaps.ivy "9" "string_keys()"
+             Hashmaps.ivy "28" "integer_keys()"
+             Resizing.ivy "5" "read()"
              Resizing.ivy "98" "write(98)"
              Resizing.ivy "0" "out_of_bounds_read()"
              Resizing.ivy "0" "out_of_bounds_write()"

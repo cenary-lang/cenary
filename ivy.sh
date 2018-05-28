@@ -37,9 +37,9 @@ function rewind-deploy {
 }
 
 function compute {
-  # if ! [[ $2 ]]; then
-  #   # start_testrpc
-  # fi
+  if ! [[ $2 ]]; then
+    start_testrpc
+  fi
   DEPLOYMENT_JS=deployment/deployment.current.js
   compile true
   deploy $1
@@ -54,9 +54,9 @@ function compute {
     rewind-deploy $1
   fi
 
-  # if ! [[ $2 ]]; then
-  #   # kill_testrpc
-  # fi
+  if ! [[ $2 ]]; then
+    kill_testrpc
+  fi
 }
 
 function blue {
@@ -80,7 +80,6 @@ function test {
     assertion_text="${ASSERTIONS[$i + 1]}"
     function_call="${ASSERTIONS[$i + 2]}"
     blue "Testing file $filename"
-    echo "Test Executing: $function_call"
     output=$(compute ./test/sources/"$filename" "$function_call" 2>&1)
     if echo $output | grep -q "$assertion_text"; then
       green "OK"

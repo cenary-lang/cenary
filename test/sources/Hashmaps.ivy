@@ -1,0 +1,21 @@
+mapping[char[]][int] string_mapping;
+mapping[int][int] integer_mapping;
+
+int string_keys() {
+  string_mapping{"yigit"} = 4;
+
+  char[] foo = "ahmet";
+  string_mapping{foo} = 5;
+
+  return string_mapping{"yigit"} + string_mapping{"ahmet"};
+};
+
+int integer_keys() {
+  int a = 3;
+  integer_mapping{3} = 4;
+
+  int b = 9;
+  integer_mapping{b} = 7;
+
+  return integer_mapping{a} * integer_mapping{9};
+};
