@@ -363,8 +363,6 @@ startResizingProcedure persistence = do
           dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
           dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
 
-          swap3 >> inc 0x20 >> swap3
-
           loopBegin <- jumpdest
 
           -- Test for loop
@@ -377,16 +375,14 @@ startResizingProcedure persistence = do
           -- Loop body
           -- [NewAddr, StackAddr, OldAddr, OldSize]
           dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
-          dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1] (index indicated by oldSize)
-          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize - 1, oldSize - 1]
-          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1)]
-          dup4 -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1), oldAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, 0x20 * (OldSize - 1) + oldAddr]
-          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldSize - 1, oldAddr[size-1]]
-          swap1 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], oldSize - 1]
-          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1)]
-          dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1), NewAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], 0x20 * (oldSize - 1) + NewAddr]
+          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20]
+          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20, OldAddr]
+          add -- [NewAddr, StackAddr, OldAddr, OldSize, 0x20 * OldSize + oldAddr]
+          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1]]
+          dup2 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize]
+          push32 0x20 >> mul -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20]
+          dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20, NewAddr]
+          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20 + NewAddr]
           store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
           dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
 
@@ -398,8 +394,7 @@ startResizingProcedure persistence = do
           loopEnd <- jumpdest
           -- [NewAddr, StackAddr, OldAddr, 0]
           (pop >> pop) -- [NewAddr, StackAddr]
-          swap1 >> dec 0x20 >> swap1
-          -- swap1 >> inc 0x20 >> logContents Temporary >> dec 0x20 >> swap1
+          -- swap1 >> dec 0x20 >> swap1 -- [NewAddr - 0x20, StackAddr]
           store' persistence -- []
       pure ()
 
