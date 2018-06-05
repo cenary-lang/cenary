@@ -27,26 +27,15 @@ import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
-import           Ivy.AbiBridge
+import           Ivy.EvmAPI.AbiBridge
 import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.API
 import           Ivy.Syntax
-import           Ivy.Register
+import           Ivy.Codegen.Register
+import           Ivy.Codegen.Procedures
 --------------------------------------------------------------------------------
-
--- | Class of monads that are able to read and update context
-class ContextM m where
-  updateCtx :: (Context -> (Bool, Context)) -> m ()
-  lookup :: String -> m (VariableStatus VarsVar)
-  lookupFun :: String -> m (VariableStatus VarsFun)
-  createCtx :: m ()
-  popCtx :: m ()
-  updateSig :: Sig -> m ()
-  ctxDeclareVar :: Name -> PrimType -> VariablePersistence -> m ()
-  ctxDefineVar :: Name -> Integer -> m ()
-  ctxDefineFunc :: Name -> PrimType -> Integer -> m ()
 
 instance ContextM Evm where
   updateCtx f' =
@@ -109,14 +98,6 @@ instance ContextM Evm where
       Def _ _ _ -> throwError $ InternalError $ "TODO (1)"
   ctxDefineFunc name retTy funPc =
     updateCtx ((True,) . M.insert name (TFun retTy, FunAddr funPc))
-
--- | Class of monads that can perform typechecking
-class TcM m where
-  checkTyEq :: Name -> PrimType -> PrimType -> m ()
-
-instance TcM Evm where
-  checkTyEq name tyL tyR =
-    unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
 
 binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> m Operand
 binOp t op = do
@@ -214,7 +195,7 @@ codegenStmt (SMapAssignment name key valExpr) = do
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order -> do
           -- [RHSVal, KeyVal]
-          applyHashingFunction True order persistence tyKey -- [RHSVal, SHA]
+          applyHashingFunction order persistence tyKey -- [RHSVal, SHA]
           store' persistence
 
 codegenStmt stmt@(SArrAssignment name index val) = do
@@ -298,10 +279,6 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     Def ty _ _ -> do
       throwError $ CannotResizeNonArray ty
 
--- | This type alias will be used for top-level codegen, since
--- at top level we use all contexts
-type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
-
 log :: CodegenM m => m ()
 log = do
   -- [val]
@@ -324,79 +301,6 @@ logContents' persistence = do
   dup1 >> load' persistence >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
   log
   pop
-
--- |
--- Input: [StackAddr, NewSize]
--- Output: []
-startResizingProcedure
-  :: forall m. CodegenM m
-  => VariablePersistence
-  -> m ()
-startResizingProcedure persistence = do
-  offset <- use funcOffset
-  branchIfElse
-    (offset)
-    (do
-      dup2 -- [StackAddr, NewSize, StackAddr]
-      dup2 -- [StackAddr, NewSize, StackAddr, NewSize]
-      swap1 -- [StackAddr, NewSize, NewSize, StackAddr]
-      load' persistence -- [StackAddr, NewSize, NewSize, OldHeapAddr]
-      load' persistence -- [StackAddr, NewSize, NewSize, OldSize]
-      lt -- [StackAddr, NewSize, OldSize < NewSize]
-    )
-    -- new size is bigger, allocate new array space
-    -- [StackAddr, NewSize] | NewSize > OldSize
-    (moveToNewArrAddr offset persistence)
-    -- [StackAddr, NewSize] | NewSize <= OldSize
-    (swap1 >> load' persistence >> store' persistence) -- new size is smaller, just set the length identifier address
-  where
-    moveToNewArrAddr :: Integer -> VariablePersistence -> m ()
-    moveToNewArrAddr offset persistence = do
-      -- [StackAddr, NewSize]
-      rec heapBegin <- use heapSpaceBegin
-          push32 heapBegin
-          load' persistence -- [StackAddr, NewSize, NewAddr]
-          swap1 -- [StackAddr, NewAddr, NewSize]
-          dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
-          store' persistence -- [StackAddr, NewAddr]
-          swap1 -- [NewAddr, StackAddr]
-          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
-          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
-
-          loopBegin <- jumpdest
-
-          -- Test for loop
-          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
-          (push32 0 >> lt) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize > 0]
-          iszero -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0]
-          push32 (loopEnd - offset) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0, loopEnd]
-          jumpi -- [NewAddr, StackAddr, OldAddr, OldSize]
-
-          -- Loop body
-          -- [NewAddr, StackAddr, OldAddr, OldSize]
-          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
-          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20]
-          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20, OldAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, 0x20 * OldSize + oldAddr]
-          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1]]
-          dup2 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize]
-          push32 0x20 >> mul -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20]
-          dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20, NewAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20 + NewAddr]
-          store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
-          dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
-
-          -- Jump back to beginning of loop
-          push32 (loopBegin - offset)
-          jump
-
-          -- End of the loop
-          loopEnd <- jumpdest
-          -- [NewAddr, StackAddr, OldAddr, 0]
-          (pop >> pop) -- [NewAddr, StackAddr]
-          -- swap1 >> dec 0x20 >> swap1 -- [NewAddr - 0x20, StackAddr]
-          store' persistence -- []
-      pure ()
 
 putFnArgsToContext :: forall m t. (CodegenM m, Foldable t) => t FuncRegistryArgInfo -> m ()
 putFnArgsToContext = traverse_ register_arg
@@ -519,29 +423,6 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       mstore
       pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName : registryInfo) -- TODO: ASSUMPTION: uint32
 
-branchIf :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m ()
-branchIf offset loadPred ifComp = do
-  rec loadPred
-      iszero -- Jump if predicate is zero
-      push32 (branchEnd - offset)
-      jumpi
-      ifComp
-      branchEnd <- jumpdest
-  pure ()
-
-branchIfElse :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> m () -> m () -> m () -> m ()
-branchIfElse offset loadPred ifComp elseComp = do
-  rec loadPred
-      push32 (elseEndIfBegin - offset)
-      jumpi
-      elseComp
-      push32 (branchEnd - offset)
-      jump
-      elseEndIfBegin <- jumpdest
-      ifComp
-      branchEnd <- jumpdest
-  pure()
-
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
   lookupFun name >>= \case
@@ -634,9 +515,12 @@ codegenExpr (EChar (fromIntegral . ord -> val)) = do
   push32 val
   return (Operand TChar)
 
-codegenExpr (EBool (boolToInt -> val)) = do
-  push32 val
+codegenExpr (EBool val) = do
+  push32 (bool_to_int val)
   return (Operand TBool)
+  where
+    bool_to_int True = 1
+    bool_to_int False = 0
 
 codegenExpr (EBinop binop expr1 expr2) = do
   Operand ty2 <- codegenExpr expr2
@@ -719,52 +603,9 @@ codegenExpr (EMapIdentifier name key) = do
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order -> do
           -- [KeyValue]
-          applyHashingFunction False order persistence tyKey -- [SHA]
+          applyHashingFunction order persistence tyKey -- [SHA]
           load' persistence
           return (Operand tyAnnotVal)
-
-applyHashingFunction :: CodegenM m => Bool -> Integer -> VariablePersistence -> PrimType -> m ()
-applyHashingFunction shouldLog order persistence = \case
-  TInt -> do
-    -- [Value]
-    valAddr <- alloc Temporary
-    orderAddr <- alloc Temporary
-    push32 valAddr -- [Value, ValAddr]
-    store' Temporary -- []
-    push32 order -- [Order]
-    push32 orderAddr -- [Order, OrderAddr]
-    store' Temporary -- []
-    push32 0x40 -- [40]
-    push32 valAddr -- [40, ValAddr]
-    sha3 -- This instruction only works inside memory, not storage, unfortunately.
-  TArray _ ->  do
-    -- [HeapAddr]
-    stackAddr <- alloc Temporary
-    push32 stackAddr -- [HeapAddr, StackAddr]
-    store' Temporary -- []
-    push32 stackAddr -- [StackAddr]
-
-    dup1 >> load' Temporary -- [StackAddr, HeapAddr]
-    load' Temporary -- [StackAddr, ArrLength]
-    inc 0x01 -- [StackAddr, ArrLength + 1]
-    dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
-    swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
-    dup1 -- [ArrLength + 1, ArrLength + 1, StackAddr, StackAddr]
-    swap2 -- [ArrLength + 1, StackAddr, StackAddr, ArrLength + 1]
-    startResizingProcedure Temporary -- [ArrLength + 1, StackAddr]
-    swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
-    load' Temporary -- [StackAddr, ArrLength + 1, HeapAddr]
-    dup2 -- [StackAddr, ArrLength + 1, HeapAddr, ArrLength + 1]
-    push32 0x20 >> mul -- [StackAddr, ArrLength + 1, HeapAddr, 0x20 * (ArrLength + 1)]
-    add -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1)]
-    push32 order -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1), Order]
-    swap1 -- [StackAddr, ArrLength + 1, Order, HeapAddr + 0x20 * (ArrLength + 1)]
-    store' Temporary -- [StackAddr, ArrLength + 1]
-    inc 0x01
-    push32 0x20 >> mul -- [StackAddr, (ArrLength + 2) * 0x20]
-    swap1 -- [(ArrLength + 2) * 0x20, StackAddr]
-    load' Temporary -- [(ArrLength + 2) * 0x20, HeapAddr]
-    sha3 -- [SHA3]
 
 lookupMappingOrder
   :: MonadState CodegenState m
@@ -833,3 +674,4 @@ bodyPhase stmts = do
       traverse_ codegenGlobalStmt stmts
       heapSpaceBegin' <- use stackMemEnd
   pure ()
+

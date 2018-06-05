@@ -1,4 +1,4 @@
-module Ivy.Register
+module Ivy.Codegen.Register
   ( allocRegisters
   , storeReg
   , loadReg

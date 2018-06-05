@@ -57,9 +57,12 @@ library
     Ivy.Crypto.Keccak,
     Evm.Abi,
     Ivy.Deployment,
-    Ivy.AbiBridge,
+    Ivy.EvmAPI.AbiBridge,
     Ivy.Error,
-    Ivy.Register
+    Ivy.Codegen.Register
+    Ivy.Codegen.Procedures
+    Ivy.EvmAPI.Instruction
+    Ivy.EvmAPI.Program
 
 test-suite tests
     type:             exitcode-stdio-1.0

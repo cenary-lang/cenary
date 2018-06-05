@@ -21,7 +21,7 @@ import           System.IO (hClose)
 import           System.Process hiding (env)
 import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
-import qualified Ivy.AbiBridge as AbiBridge
+import qualified Ivy.EvmAPI.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
 import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
                                     initProgram, runEvm, FuncRegistry (..))

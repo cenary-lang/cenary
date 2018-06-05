@@ -3,8 +3,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Ivy.EvmAPI.API
-  ( OpcodeM
-  , jumpdest
+  ( OpcodeM (..)
+  , toOpcode
   , stop
   , add
   , mul
@@ -48,14 +48,16 @@ module Ivy.EvmAPI.API
   , inc
   , dec
   , sha3
+  , leq
+  , VariablePersistence (..)
+  , Instruction (JUMPDEST)
   ) where
 
-import           Control.Lens hiding (op)
-import           Control.Monad.State (MonadState)
 import           Data.Monoid ((<>))
-import           Ivy.Codegen.Types
 import           Prelude hiding (EQ, GT, LT, div, exp, mod)
 import           Text.Printf
+import Ivy.EvmAPI.Instruction (Instruction (..))
+import Ivy.EvmAPI.Program (Program (..))
 
 type Opcode = Integer
 
@@ -102,16 +104,6 @@ toOpcode = \case
   RETURN       -> (0xf3, 1)
   ADDRESS      -> (0x30, 1)
   SHA3         -> (0x20, 1)
-
--- | Class of monads that can run opcodes
-class Monad m => OpcodeM m where
-  op :: Instruction -> m ()
-
-instance OpcodeM Evm where
-  op instr = do
-    let (_, cost) = toOpcode instr
-    pc += cost
-    program %= (addInstr instr)
 
 stop, add, mul, sub, div, mod, gt, lt, eq, iszero, pop, mload, mstore, mstore8, sload, sstore, jump, jumpi, codecopy, dup1, exp, calldataload, dup2, dup3, dup4, dup5, dup6, swap1, swap2, swap3, swap4, log0, log1, log2, op_return, address, sha3 :: OpcodeM m => m ()
 
@@ -162,8 +154,10 @@ push4 = op . PUSH4
 push32 :: OpcodeM m => Integer -> m ()
 push32 = op . PUSH32
 
-jumpdest :: (OpcodeM m, MonadState CodegenState m) => m Integer
-jumpdest = use pc <* op JUMPDEST
+data VariablePersistence =
+    Permanent
+  | Temporary
+  deriving (Show, Eq)
 
 generateByteCode :: Program -> String
 generateByteCode (Program instructions) =
@@ -193,3 +187,7 @@ leq = do
   swap1
   sub
   lt
+
+-- | Class of monads that can run opcodes
+class Monad m => OpcodeM m where
+  op :: Instruction -> m ()

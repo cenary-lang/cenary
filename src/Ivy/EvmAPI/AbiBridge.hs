@@ -4,7 +4,7 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Ivy.AbiBridge where
+module Ivy.EvmAPI.AbiBridge where
 
 import           Control.Monad.Except
 import           Data.Semigroup ((<>))

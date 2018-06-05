@@ -5,6 +5,8 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts            #-}
 
 module Ivy.Codegen.Types where
 
@@ -16,52 +18,11 @@ import qualified Data.Map as M
 import           Data.Semigroup ((<>))
 import qualified Data.Sequence as Seq
 --------------------------------------------------------------------------------
-import           Ivy.Syntax (Expr, PrimType (..), Stmt)
+import           Ivy.Syntax (Expr, PrimType (..), Stmt, Name)
+import Ivy.EvmAPI.Instruction (Instruction (..))
+import Ivy.EvmAPI.Program (Program (..))
+import Ivy.EvmAPI.API
 --------------------------------------------------------------------------------
-
-data Instruction =
-    STOP
-  | ADD
-  | MUL
-  | SUB
-  | DIV
-  | MOD
-  | GT
-  | LT
-  | EQ
-  | ISZERO
-  | POP
-  | MLOAD
-  | MSTORE
-  | MSTORE8
-  | SLOAD
-  | SSTORE
-  | JUMP
-  | JUMPI
-  | JUMPDEST
-  | CODECOPY
-  | PUSH1 Integer
-  | PUSH4 Integer
-  | PUSH32 Integer
-  | DUP1
-  | EXP
-  | CALLDATALOAD
-  | DUP2
-  | DUP3
-  | DUP4
-  | DUP5
-  | DUP6
-  | SWAP1
-  | SWAP2
-  | SWAP3
-  | SWAP4
-  | LOG0
-  | LOG1
-  | LOG2
-  | RETURN
-  | ADDRESS
-  | SHA3
-  deriving Show
 
 data ErrorDetails = NoDetails
                   | ExprDetails Expr
@@ -157,11 +118,6 @@ data Address = VarAddr (Maybe Integer) VariablePersistence
              -- ^      PC
              deriving Show
 
-data VariablePersistence =
-    Permanent
-  | Temporary
-  deriving (Show, Eq)
-
 type Context = M.Map String (PrimType, Address)
 
 data Sig = Sig String [(PrimType, String)] PrimType
@@ -192,9 +148,6 @@ data FuncRegistry = FuncRegistry
   }
 
 makeLenses ''FuncRegistry
-
--- | TODO: This should have its own module
-newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }
 
 makeLenses ''Program
 
@@ -235,3 +188,71 @@ data VariableStatus a where
   Decl        :: PrimType -> VariablePersistence -> VariableStatus VarsVar
   Def         :: PrimType -> Integer -> VariablePersistence -> VariableStatus VarsVar
   FunDef      :: PrimType -> Integer -> VariableStatus VarsFun
+
+-- | This type alias will be used for top-level codegen, since
+-- at top level we use all contexts
+type CodegenM m = (OpcodeM m, MonadState CodegenState m, MemoryM m, MonadError CodegenError m, ContextM m, TcM m, MonadFix m)
+
+-- | Class of monads that can perform typechecking
+class TcM m where
+  checkTyEq :: Name -> PrimType -> PrimType -> m ()
+
+instance TcM Evm where
+  checkTyEq name tyL tyR =
+    unless (tyL == tyR) $ throwError $ TypeMismatch name tyR tyL
+
+-- | Class of monads that are able to read and update context
+class ContextM m where
+  updateCtx :: (Context -> (Bool, Context)) -> m ()
+  lookup :: String -> m (VariableStatus VarsVar)
+  lookupFun :: String -> m (VariableStatus VarsFun)
+  createCtx :: m ()
+  popCtx :: m ()
+  updateSig :: Sig -> m ()
+  ctxDeclareVar :: Name -> PrimType -> VariablePersistence -> m ()
+  ctxDefineVar :: Name -> Integer -> m ()
+  ctxDefineFunc :: Name -> PrimType -> Integer -> m ()
+
+instance OpcodeM Evm where
+  op instr = do
+    let (_, cost) = toOpcode instr
+    pc += cost
+    program %= (addInstr instr)
+
+class (Functor m, Applicative m, Monad m) => MemoryM m where
+  load
+    :: Integer
+    -> VariablePersistence
+    -> m ()
+  load'
+    :: VariablePersistence
+    -> m ()
+  alloc
+    :: VariablePersistence
+    -> m Integer
+  store'
+    :: VariablePersistence
+    -> m ()
+  push
+    :: Integer
+    -> m ()
+
+instance MemoryM Evm where
+  load addr persistence = do
+    push32 addr
+    load' persistence
+
+  load' = \case
+    Permanent -> sload
+    Temporary -> mload
+
+  store' = \case
+    Permanent -> sstore
+    Temporary -> mstore
+
+  alloc = \case
+    Permanent -> stackStorageEnd <<+= 0x20
+    Temporary -> stackMemEnd <<+= 0x20
+
+  push val =
+    push32 val -- OPTIMIZE: different PUSH variants can be used for this task
