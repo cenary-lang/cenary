@@ -21,43 +21,43 @@ applyHashingFunction :: CodegenM m => Integer -> PrimType -> m ()
 applyHashingFunction order = \case
   TInt -> do
     -- [Value]
-    valAddr <- alloc Temporary
-    orderAddr <- alloc Temporary
+    valAddr <- alloc Local
+    orderAddr <- alloc Local
     push32 valAddr -- [Value, ValAddr]
-    store' Temporary -- []
+    store' Local -- []
     push32 order -- [Order]
     push32 orderAddr -- [Order, OrderAddr]
-    store' Temporary -- []
+    store' Local -- []
     push32 0x40 -- [40]
     push32 valAddr -- [40, ValAddr]
     sha3 -- This instruction only works inside memory, not storage, unfortunately.
   TArray _ ->  do
     -- [HeapAddr]
-    stackAddr <- alloc Temporary
+    stackAddr <- alloc Local
     push32 stackAddr -- [HeapAddr, StackAddr]
-    store' Temporary -- []
+    store' Local -- []
     push32 stackAddr -- [StackAddr]
 
-    dup1 >> load' Temporary -- [StackAddr, HeapAddr]
-    load' Temporary -- [StackAddr, ArrLength]
+    dup1 >> load' Local -- [StackAddr, HeapAddr]
+    load' Local -- [StackAddr, ArrLength]
     inc 0x01 -- [StackAddr, ArrLength + 1]
     dup1 -- [StackAddr, ArrLength + 1, ArrLength + 1]
     swap2 -- [ArrLength + 1, ArrLength + 1, StackAddr]
     dup1 -- [ArrLength + 1, ArrLength + 1, StackAddr, StackAddr]
     swap2 -- [ArrLength + 1, StackAddr, StackAddr, ArrLength + 1]
-    startResizingProcedure Temporary -- [ArrLength + 1, StackAddr]
+    startResizingProcedure Local -- [ArrLength + 1, StackAddr]
     swap1 >> dup2 -- [StackAddr, ArrLength + 1, StackAddr]
-    load' Temporary -- [StackAddr, ArrLength + 1, HeapAddr]
+    load' Local -- [StackAddr, ArrLength + 1, HeapAddr]
     dup2 -- [StackAddr, ArrLength + 1, HeapAddr, ArrLength + 1]
     push32 0x20 >> mul -- [StackAddr, ArrLength + 1, HeapAddr, 0x20 * (ArrLength + 1)]
     add -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1)]
     push32 order -- [StackAddr, ArrLength + 1, HeapAddr + 0x20 * (ArrLength + 1), Order]
     swap1 -- [StackAddr, ArrLength + 1, Order, HeapAddr + 0x20 * (ArrLength + 1)]
-    store' Temporary -- [StackAddr, ArrLength + 1]
+    store' Local -- [StackAddr, ArrLength + 1]
     inc 0x01
     push32 0x20 >> mul -- [StackAddr, (ArrLength + 2) * 0x20]
     swap1 -- [(ArrLength + 2) * 0x20, StackAddr]
-    load' Temporary -- [(ArrLength + 2) * 0x20, HeapAddr]
+    load' Local -- [(ArrLength + 2) * 0x20, HeapAddr]
     sha3 -- [SHA3]
   otherTy -> throwError $ InternalError $ "Hashing function is not yet implemented for type " <> show otherTy
 
@@ -65,7 +65,7 @@ applyHashingFunction order = \case
 -- Output: []
 startResizingProcedure
   :: CodegenM m
-  => VariablePersistence
+  => Scope
   -> m ()
 startResizingProcedure persistence = do
   offset <- use funcOffset
@@ -87,7 +87,7 @@ startResizingProcedure persistence = do
 
 -- Input: [StackAddr, NewSize]
 -- Output: []
-expandArr :: CodegenM m => Integer -> VariablePersistence -> m ()
+expandArr :: CodegenM m => Integer -> Scope -> m ()
 expandArr offset persistence = do
   -- [StackAddr, NewSize]
   rec heapBegin <- use heapSpaceBegin

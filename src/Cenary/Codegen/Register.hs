@@ -24,7 +24,7 @@ regAddr = (* 0x20) . fromIntegral . fromEnum
 
 allocRegisters :: MemoryM m => m ()
 allocRegisters = do
-  for_ [(minBound :: Register)..maxBound] $ const (void (alloc Temporary))
+  for_ [(minBound :: Register)..maxBound] $ const (void (alloc Local))
 
 storeReg :: (OpcodeM m, MemoryM m) => Register -> m ()
 storeReg reg = push32 (regAddr reg) >> mstore

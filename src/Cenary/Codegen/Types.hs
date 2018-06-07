@@ -38,7 +38,7 @@ data FuncRegistry = FuncRegistry
 
 type MappingOrder = M.Map String Integer
 
-data Address = VarAddr (Maybe Integer) VariablePersistence
+data Address = VarAddr (Maybe Integer) Scope
              -- ^      Variable adress
              | FunAddr Integer
              -- ^      PC
@@ -72,8 +72,8 @@ makeLenses ''CodegenState
 
 data VariableStatus a where
   NotDeclared :: VariableStatus a
-  Decl        :: PrimType -> VariablePersistence -> VariableStatus VarsVar
-  Def         :: PrimType -> Integer -> VariablePersistence -> VariableStatus VarsVar
+  Decl        :: PrimType -> Scope -> VariableStatus VarsVar
+  Def         :: PrimType -> Integer -> Scope -> VariableStatus VarsVar
   FunDef      :: PrimType -> Integer -> VariableStatus VarsFun
 
 -- | Class of monads that are able to read and update context
@@ -84,7 +84,7 @@ class ContextM m where
   createCtx :: m ()
   popCtx :: m ()
   updateSig :: Sig -> m ()
-  ctxDeclareVar :: Name -> PrimType -> VariablePersistence -> m ()
+  ctxDeclareVar :: Name -> PrimType -> Scope -> m ()
   ctxDefineVar :: Name -> Integer -> m ()
   ctxDefineFunc :: Name -> PrimType -> Integer -> m ()
 
@@ -103,7 +103,7 @@ instance ContextM Evm where
       go [] = return NotDeclared
       go (ctx:xs) =
         case M.lookup name ctx of
-          Just (varTy, VarAddr varAddr persistence) -> decideVar (varTy, varAddr) persistence
+          Just (varTy, VarAddr varAddr scope) -> decideVar (varTy, varAddr) scope
           Just _ -> throwError $ InternalError $ "Another case for context (1)"
           Nothing -> go xs
         where
@@ -121,20 +121,14 @@ instance ContextM Evm where
   createCtx = env %= (contexts %~ (M.empty :))
   popCtx = env %= (contexts %~ tail)
   updateSig sig' = env %= (sig .~ sig')
-  ctxDeclareVar name ty persistence =
-    lookup name >>= \case
-      NotDeclared -> do
-        updateCtx ((True,) . M.insert name (ty, VarAddr Nothing persistence))
-        case ty of
-          TMap _ _ -> do
-            addr <- alloc persistence
-            create_mapping_order name
-            ctxDefineVar name addr
-          _ -> pure ()
-      Decl _ _ ->
-        throwError $ InternalError $ "TODO (2)"
-      Def _ _ _ ->
-        throwError $ InternalError $ "TODO (3)"
+  ctxDeclareVar name ty scope = do
+    updateCtx ((True,) . M.insert name (ty, VarAddr Nothing scope))
+    case ty of
+      TMap _ _ -> do
+        addr <- alloc scope
+        create_mapping_order name
+        ctxDefineVar name addr
+      _ -> pure ()
     where
       create_mapping_order
         :: (MonadState CodegenState m, MonadError CodegenError m)
@@ -148,17 +142,17 @@ instance ContextM Evm where
             mappingOrder %= M.insert name nextOrder
           Just _ ->
             throwError $ InternalError $ "Multiple mapping order insert attempts for mapping named " <> name
-
   ctxDefineVar name addr =
     lookup name >>= \case
-      NotDeclared -> throwError (VariableNotDeclared name (TextDetails "ctxDefineVar"))
-      Decl tyL persistence -> do
+      NotDeclared ->
+        throwError (VariableNotDeclared name (TextDetails "ctxDefineVar"))
+      Decl tyL scope -> do
         updateCtx $ \ctx ->
           case M.lookup name ctx of
             Nothing ->
               (False, ctx)
             Just _ ->
-              (True, M.update (const (Just (tyL, VarAddr (Just addr) persistence))) name ctx)
+              (True, M.update (const (Just (tyL, VarAddr (Just addr) scope))) name ctx)
       Def _ _ _ -> throwError $ InternalError $ "TODO (1)"
   ctxDefineFunc name retTy funPc =
     updateCtx ((True,) . M.insert name (TFun retTy, FunAddr funPc))
@@ -285,16 +279,16 @@ instance OpcodeM Evm where
 class (Functor m, Applicative m, Monad m) => MemoryM m where
   load
     :: Integer
-    -> VariablePersistence
+    -> Scope
     -> m ()
   load'
-    :: VariablePersistence
+    :: Scope
     -> m ()
   alloc
-    :: VariablePersistence
+    :: Scope
     -> m Integer
   store'
-    :: VariablePersistence
+    :: Scope
     -> m ()
   push
     :: Integer
@@ -302,21 +296,21 @@ class (Functor m, Applicative m, Monad m) => MemoryM m where
 
 
 instance MemoryM Evm where
-  load addr persistence = do
+  load addr scope = do
     push32 addr
-    load' persistence
+    load' scope
 
   load' = \case
-    Permanent -> sload
-    Temporary -> mload
+    Global -> sload
+    Local -> mload
 
   store' = \case
-    Permanent -> sstore
-    Temporary -> mstore
+    Global -> sstore
+    Local -> mstore
 
   alloc = \case
-    Permanent -> stackStorageEnd <<+= 0x20
-    Temporary -> stackMemEnd <<+= 0x20
+    Global -> stackStorageEnd <<+= 0x20
+    Local -> stackMemEnd <<+= 0x20
 
   push val =
     push32 val -- OPTIMIZE: different PUSH variants can be used for this task

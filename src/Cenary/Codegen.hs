@@ -51,29 +51,29 @@ assignFromStack
 assignFromStack tyR name =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (TextDetails "assignment"))
-    Decl tyL persistence -> do
+    Decl tyL scope -> do
       checkTyEq name tyL tyR
-      addr <- alloc persistence
+      addr <- alloc scope
       push32 addr
-      store' persistence
+      store' scope
       ctxDefineVar name addr
-    Def tyL oldAddr persistence -> do
+    Def tyL oldAddr scope -> do
       checkTyEq name tyL tyR
       push32 oldAddr
-      store' persistence
+      store' scope
 
 declVar
   :: (MonadState CodegenState m, ContextM m, MonadError CodegenError m, MemoryM m)
   => PrimType
   -> Name
-  -> VariablePersistence
+  -> Scope
   -> m ()
-declVar ty name persistence =
+declVar ty name scope =
   lookup name >>= \case
     Decl _ _ -> throwError (VariableAlreadyDeclared name)
     Def _ _ _ -> throwError (VariableAlreadyDeclared name)
     NotDeclared -> do
-      ctxDeclareVar name ty persistence
+      ctxDeclareVar name ty scope
 
 codegenStmt :: forall m. CodegenM m => Stmt -> m ()
 codegenStmt (SWhile pred block) = do
@@ -117,8 +117,8 @@ codegenStmt (SMapAssignment name key valExpr) = do
       throwError (VariableNotDeclared name (TextDetails "SMapAssignment"))
     Decl _ _ ->
       throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
-    Def (TMap tyAnnotKey tyAnnotVal) _ persistence -> do
-      when (persistence /= Permanent) $ throwError $ InternalError "Persistence of mappings should be Permanent, not Temporary"
+    Def (TMap tyAnnotKey tyAnnotVal) _ scope -> do
+      when (scope /= Global) $ throwError $ InternalError "Persistence of mappings should be Permanent, not Temporary"
       checkTyEq name tyAnnotVal tyR
       Operand tyKey <- codegenExpr key
       -- [RHSVal, KeyVal]
@@ -129,7 +129,7 @@ codegenStmt (SMapAssignment name key valExpr) = do
         Just order -> do
           -- [RHSVal, KeyVal]
           applyHashingFunction order tyKey -- [RHSVal, SHA]
-          store' Permanent
+          store' Global
     Def other _ _ ->
       throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other
 
@@ -147,13 +147,13 @@ codegenStmt stmt@(SArrAssignment name index val) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL _ -> throwError (NonInitializedArrayAccess name)
-    Def (TArray aTy) addr persistence -> do
+    Def (TArray aTy) addr scope -> do
       checkTyEq name aTy tyR
-      load addr persistence -- [1, 5, 340]
+      load addr scope -- [1, 5, 340]
       -- Size check
       dup3 -- [1, 5, 340, 1]
       dup2 -- [1, 5, 340, 1, 340]
-      load' persistence -- [1, 5, 340, 1, 3]
+      load' scope -- [1, 5, 340, 1, 3]
       branchIf
         offset
         (push32 0x01 >> swap1 >> sub >> lt)
@@ -169,7 +169,7 @@ codegenStmt stmt@(SArrAssignment name index val) = do
     Def ty _ _ -> throwError (IllegalArrAccess name ty)
 
 codegenStmt (SVarDecl ty name) =
-  declVar ty name Temporary
+  declVar ty name Local
 
 codegenStmt (SDeclAndAssignment ty name val) = do
   codegenStmt (SVarDecl ty name)
@@ -208,10 +208,10 @@ codegenStmt stmt@(SResize name sizeExpr) = do
   lookup name >>= \case
     NotDeclared -> throwError $ VariableNotDeclared name (StmtDetails stmt)
     Decl _tyL _ -> throwError (NonInitializedArrayResize name)
-    Def (TArray _) addr persistence -> do
+    Def (TArray _) addr scope -> do
       push32 addr -- [NewSize, StackAddr]
       swap1 -- [StackAddr, NewSize]
-      startResizingProcedure persistence -- []
+      startResizingProcedure scope -- []
     Def ty _ _ -> do
       throwError $ CannotResizeNonArray ty
 
@@ -219,22 +219,22 @@ log :: CodegenM m => m ()
 log = do
   -- [val]
   dup1 -- [val, val]
-  shaAddr <- alloc Temporary
+  shaAddr <- alloc Local
   push32 shaAddr -- [val, val, addr]
   mstore -- [val]
   push32 0x20 -- [val, 0x20]
   push32 shaAddr -- [val, 0x20, addr]
   log0 -- [val]
 
-logContents :: VariablePersistence -> CodegenM m => m ()
-logContents persistence = do
-  dup1 >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+logContents :: Scope -> CodegenM m => m ()
+logContents scope = do
+  dup1 >> load' scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
   log
   pop
 
-logContents' :: VariablePersistence -> CodegenM m => m ()
-logContents' persistence = do
-  dup1 >> load' persistence >> load' persistence -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+logContents' :: Scope -> CodegenM m => m ()
+logContents' scope = do
+  dup1 >> load' scope >> load' scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
   log
   pop
 
@@ -243,7 +243,7 @@ putFnArgsToContext = traverse_ register_arg
   where
     register_arg :: FuncRegistryArgInfo -> m ()
     register_arg (FuncRegistryArgInfo ty name) = do
-      declVar ty name Temporary
+      declVar ty name Local
       assignFromStack ty name
 
 sigToKeccak256 :: forall m b. (MonadError CodegenError m, Read b, Num b) => FunSig -> m b
@@ -317,7 +317,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
                 swap1
                 jump
               externalCall = do
-                addr <- alloc Temporary
+                addr <- alloc Local
                 push32 addr
                 mstore
                 push32 (addr + 0x20)
@@ -350,7 +350,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
 
     storeParamsFold :: forall m. CodegenM m => (Integer, [FuncRegistryArgInfo]) -> (PrimType, Name) -> m (Integer, [FuncRegistryArgInfo])
     storeParamsFold (calldataOffset, registryInfo) (argTy, argName) = do
-      argAddr <- alloc Temporary
+      argAddr <- alloc Local
       -- Fill arg addresses with incoming values from the call
       push32 calldataOffset
       calldataload
@@ -403,8 +403,8 @@ codegenExpr expr@(EIdentifier name) =
   lookup name >>= \case
     NotDeclared -> throwError (VariableNotDeclared name (ExprDetails expr))
     Decl _ _ -> throwError (VariableNotDefined name)
-    Def ty addr persistence -> do
-      load addr persistence
+    Def ty addr scope -> do
+      load addr scope
       return (Operand ty)
 
 codegenExpr (EArrIdentifier name index) = do
@@ -414,18 +414,18 @@ codegenExpr (EArrIdentifier name index) = do
       throwError (VariableNotDeclared name (TextDetails "in array assignment"))
     Decl _ _ ->
       throwError (VariableNotDefined name)
-    Def (TArray ty) addr persistence -> do
+    Def (TArray ty) addr scope -> do
       Operand indexTy <- codegenExpr index
       -- a[2]
       checkTyEq name TInt indexTy
 
       push32 addr
-      load' persistence -- [2, 160]
+      load' scope -- [2, 160]
 
       -- Runtime check for array bounds
       dup2 -- [2, 160, 2]
       dup2 -- [2, 160, 2, 160]
-      load' persistence -- [2, 160, 2, 1]
+      load' scope -- [2, 160, 2, 1]
       branchIf
         offset
         (push32 0x01 >> swap1 >> sub >> lt)
@@ -438,7 +438,7 @@ codegenExpr (EArrIdentifier name index) = do
       push32 0x20
       mul
       add
-      load' persistence
+      load' scope
 
       return (Operand ty)
     Def ty _ _ -> throwError (IllegalArrAccess name ty)
@@ -480,7 +480,7 @@ codegenExpr (EBinop binop expr1 expr2) = do
 codegenExpr (EArray elemExprs) = do
   elems <- mapM codegenExpr (reverse elemExprs)
   elemTy <- testOperandsSameTy elems
-  arrAddr <- alloc Temporary
+  arrAddr <- alloc Local
 
   heapBegin <- use heapSpaceBegin
   push32 heapBegin -- [3, 2, 1, 360]
@@ -531,7 +531,7 @@ codegenExpr (EMapIdentifier name key) = do
       throwError (VariableNotDeclared name (TextDetails "EMapIdentifier"))
     Decl _ _ ->
       throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
-    Def (TMap tyAnnotKey tyAnnotVal) _ persistence -> do
+    Def (TMap tyAnnotKey tyAnnotVal) _ scope -> do
       Operand tyKey <- codegenExpr key
       checkTyEq name tyAnnotKey tyKey
       lookupMappingOrder name >>= \case
@@ -540,7 +540,7 @@ codegenExpr (EMapIdentifier name key) = do
         Just order -> do
           -- [KeyValue]
           applyHashingFunction order tyKey -- [SHA]
-          load' persistence
+          load' scope
           return (Operand tyAnnotVal)
     Def other _ _ ->
       throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other
@@ -578,7 +578,7 @@ codegenGlobalStmt :: CodegenM m => GlobalStmt -> m ()
 codegenGlobalStmt (GlobalFunc funStmt) = codegenFunDef funStmt
 codegenGlobalStmt (GlobalDecl stmt) =
   case stmt of
-    SVarDecl ty name -> declVar ty name Permanent
+    SVarDecl ty name -> declVar ty name Global
 
     -- TODO: Make this a user error, not an internal one
     _ -> throwError $ InternalError "Only declarations are allowed at global scope"

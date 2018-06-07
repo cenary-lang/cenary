@@ -49,7 +49,7 @@ module Cenary.EvmAPI.API
   , dec
   , sha3
   , leq
-  , VariablePersistence (..)
+  , Scope (..)
   , Instruction (JUMPDEST)
   ) where
 
@@ -154,9 +154,7 @@ push4 = op . PUSH4
 push32 :: OpcodeM m => Integer -> m ()
 push32 = op . PUSH32
 
-data VariablePersistence =
-    Permanent
-  | Temporary
+data Scope = Local | Global
   deriving (Show, Eq)
 
 generateByteCode :: Program -> String
