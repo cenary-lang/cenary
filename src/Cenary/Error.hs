@@ -1,7 +1,7 @@
-module Ivy.Error where
+module Cenary.Error where
 
 import           Data.Semigroup ((<>))
-import           Ivy.Codegen.Types
+import           Cenary.Codegen.Types
 import           Text.Parsec (ParseError)
 
 data Error =

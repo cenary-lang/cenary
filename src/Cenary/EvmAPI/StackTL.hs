@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Ivy.EvmAPI.StackTL where
+module Cenary.EvmAPI.StackTL where
 
 import           Control.Monad.Indexed
 import           GHC.TypeLits

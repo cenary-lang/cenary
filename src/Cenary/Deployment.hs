@@ -1,4 +1,4 @@
-module Ivy.Deployment where
+module Cenary.Deployment where
 
 import           Control.Applicative (liftA2)
 import           Data.Semigroup ((<>))

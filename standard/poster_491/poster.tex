@@ -70,8 +70,8 @@ linewidth=2pt % Width of the border lines around content boxes
 %	TITLE SECTION 
 %----------------------------------------------------------------------------------------
 %
-{\includegraphics[height=4em]{Ivy_Logo.png}} % First university/lab logo on the left
-{\bf\textsc{Ivy: A programming language targeting EVM}\vspace{0.5em}} % Poster title
+{\includegraphics[height=4em]{Cenary_Logo.png}} % First university/lab logo on the left
+{\bf\textsc{Cenary: A programming language targeting EVM}\vspace{0.5em}} % Poster title
 { Yigit Ozkavci \\\hspace{12pt} Advisor: Can Ozturan } % Author names and institution
 {\includegraphics[height=4em]{Boun_Logo.png}} % Second university/lab logo on the right
 
@@ -81,7 +81,7 @@ linewidth=2pt % Width of the border lines around content boxes
 
 \headerbox{Introduction}{name=objectives,column=0,row=0}{
 
-Ivy is a programming language designed for Ethereum Virtual Machine. Ivy enables us to write smart contracts and deploy them directly to an Ethereum blockchain.
+Cenary is a programming language designed for Ethereum Virtual Machine. Cenary enables us to write smart contracts and deploy them directly to an Ethereum blockchain.
 
 \vspace{0.3em} % When there are two boxes, some whitespace may need to be added if the one on the right has more content
 }
@@ -94,14 +94,14 @@ Ivy is a programming language designed for Ethereum Virtual Machine. Ivy enables
 
 \begin{center}
 \includegraphics[width=0.8\linewidth]{Architecture}
-\captionof{figure}{Ivy Architecture}
+\captionof{figure}{Cenary Architecture}
 \end{center}
 
-Ivy compiler first runs the lexer to tokenize ivy source into meaningful pieces. Then parser works through these tokens and creates an abstract syntax tree.\\
+Cenary compiler first runs the lexer to tokenize cenary source into meaningful pieces. Then parser works through these tokens and creates an abstract syntax tree.\\
 
-This abstract syntax tree directly corresponds to a top level recursive Haskell type called $AnyStmt$. As you might guess, this denotes that an Ivy program is just a big statement, consisting of smaller statements ($Stmt$ type) and expressions ($Expr$ type).\\
+This abstract syntax tree directly corresponds to a top level recursive Haskell type called $AnyStmt$. As you might guess, this denotes that an Cenary program is just a big statement, consisting of smaller statements ($Stmt$ type) and expressions ($Expr$ type).\\
 
-You might wonder why we don't have a top level $Stmt$ type, but $AnyStmt$; this is because in Ivy, we pre-process function definitions so that we can call them before their declaration in our program. Hence, $AnyStmt$ expands into $FundefStmt$ and $Stmt$.\\
+You might wonder why we don't have a top level $Stmt$ type, but $AnyStmt$; this is because in Cenary, we pre-process function definitions so that we can call them before their declaration in our program. Hence, $AnyStmt$ expands into $FundefStmt$ and $Stmt$.\\
 
 The magic happens in code generation phase. $Codegen$ module takes ast as input and generates EVM bytecode.
 }
@@ -125,9 +125,9 @@ The magic happens in code generation phase. $Codegen$ module takes ast as input 
 
 \headerbox{Future Research}{name=futureresearch,column=1,span=2,aligned=references,above=bottom}{ % This block is as tall as the references block
 
-Even though Ivy is currently usable, it still lacks several features such as external type-checker module, recursions, module system and a stable standard library.\\
+Even though Cenary is currently usable, it still lacks several features such as external type-checker module, recursions, module system and a stable standard library.\\
 
-We plan Ivy to be a pure functional language, hence we need to implement message sending \& receiving in this paradigm. There are good examples such as Elm\cite{elm} and PureScript\cite{purescript} which are pure functional front-end languages managing effects user-inputs in different styles.
+We plan Cenary to be a pure functional language, hence we need to implement message sending \& receiving in this paradigm. There are good examples such as Elm\cite{elm} and PureScript\cite{purescript} which are pure functional front-end languages managing effects user-inputs in different styles.
 }
 
 %----------------------------------------------------------------------------------------
@@ -148,11 +148,11 @@ We plan Ivy to be a pure functional language, hence we need to implement message
 %----------------------------------------------------------------------------------------
 
 \headerbox{Research}{name=research,column=2,span=2,row=0,below=architecture,above=references}{
-Before writing Ivy's compiler, we first needed to explore how EVM works, and how it manages stack \& memory to persist temporary computation steps. \\
+Before writing Cenary's compiler, we first needed to explore how EVM works, and how it manages stack \& memory to persist temporary computation steps. \\
 
 There is one and only one source that describes how EVM works, which is called the \textbf{yellowpaper}\cite{yellowpaper} which is a very-formally designed paper that explains every operation that could be executed on EVM in detail.\\
 
-After we figured out how memory is handled, the rest was to learn instruction set of EVM, which itself has an assembly-like instruction set that runs instructions on stack. Compiling Ivy essentially the process of converting ivy source code into EVM bytecode with EVM bytecode being series of bytes, with each one representing an instruction to be executed.
+After we figured out how memory is handled, the rest was to learn instruction set of EVM, which itself has an assembly-like instruction set that runs instructions on stack. Compiling Cenary essentially the process of converting cenary source code into EVM bytecode with EVM bytecode being series of bytes, with each one representing an instruction to be executed.
 }
 
 %----------------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ Every computation on the smart contracts costs gas, a measure for computational 
 \captionof{figure}{Smart Contract with Solidity}
 \end{center}
 
-Since this is the second term and we continued developing Ivy, which was already a mature programming language, we've made crucial improvements in order to make Ivy more convenient and po
+Since this is the second term and we continued developing Cenary, which was already a mature programming language, we've made crucial improvements in order to make Cenary more convenient and po
 }
 
 %----------------------------------------------------------------------------------------
@@ -178,9 +178,9 @@ Since this is the second term and we continued developing Ivy, which was already
 
 \headerbox{Language Features}{name=language_features,column=1,bottomaligned=research}{ % This block's bottom aligns with the bottom of the research block
 
-Ivy is a Turing-complete programming language, meaning given enough memory, it can run any given computation.\\
+Cenary is a Turing-complete programming language, meaning given enough memory, it can run any given computation.\\
 
-Below is a list of features that Ivy currently supports:
+Below is a list of features that Cenary currently supports:
 \begin{itemize}
 \item Primitives: int, char, bool
 \item Array types: int[], char[], bool[]
@@ -205,7 +205,7 @@ Below is a list of features that Ivy currently supports:
 \end{itemize}
 }
 
-Even though Ivy does not have a module system yet, we are capable of implementing a standard library for Ivy, written in Ivy.
+Even though Cenary does not have a module system yet, we are capable of implementing a standard library for Cenary, written in Cenary.
 %----------------------------------------------------------------------------------------
 
 \end{poster}

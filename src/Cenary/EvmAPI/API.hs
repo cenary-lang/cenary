@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Ivy.EvmAPI.API
+module Cenary.EvmAPI.API
   ( OpcodeM (..)
   , toOpcode
   , stop
@@ -54,8 +54,8 @@ module Ivy.EvmAPI.API
   ) where
 
 import           Data.Monoid ((<>))
-import           Ivy.EvmAPI.Instruction (Instruction (..))
-import           Ivy.EvmAPI.Program (Program (..))
+import           Cenary.EvmAPI.Instruction (Instruction (..))
+import           Cenary.EvmAPI.Program (Program (..))
 import           Prelude hiding (EQ, GT, LT, div, exp, mod)
 import           Text.Printf
 

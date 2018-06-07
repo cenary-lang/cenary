@@ -50,13 +50,13 @@
 
 \section{Introduction}
 \par 
-\par This is the CMPE492 midterm progress report for project Ivy, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
-\par First part of the Ivy was developed in the course of CMPE491, for which a midterm and final report already exists and can be found here\cite{CMPE491mtreport} and here\cite{CMPE491finalreport}.
+\par This is the CMPE492 midterm progress report for project Cenary, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
+\par First part of the Cenary was developed in the course of CMPE491, for which a midterm and final report already exists and can be found here\cite{CMPE491mtreport} and here\cite{CMPE491finalreport}.
 
 In this term, we focused on language improvements targeting a more simplified memory model, deployment of our bytecode into blockchain networks and testing this behavior. We will illustrate each of these improvements/features in their own sections.
 
 \section{A New Memory Model}
-We used to have a pointed memory model, which was essentially allocating each variable according to its type. While working on deployment of the Ivy, we realized that memory operations should be optimized according to time, not space, which causes faster operations, but more space to be allocated. To see why can't we have best of the both worlds, let's look at EVM's memory-related instructions which are highly well-documented in the yellowpaper\cite{yellowpaper}:
+We used to have a pointed memory model, which was essentially allocating each variable according to its type. While working on deployment of the Cenary, we realized that memory operations should be optimized according to time, not space, which causes faster operations, but more space to be allocated. To see why can't we have best of the both worlds, let's look at EVM's memory-related instructions which are highly well-documented in the yellowpaper\cite{yellowpaper}:
 \begin{lstlisting}
 MLOAD: Load a word from memory
 MSTORE: Save a word to memory
@@ -97,7 +97,7 @@ As you might have noticed, we reference some future values in our code such as \
 This phase is the heart of the EVM computation. In this part, we split bytecode into sections for each function. What each function does is similar to each other:
 \begin{itemize}
   \item Get the calling function name and test it to decide whether you are the one being called; if so, do nothing; else, jump to the next function test.
-  \item Get the function parameters from the caller: functions can take multiple parameters from various types: Ivy handles only integer type parameters for now, but it handles multiple parameters, as much as caller wants.
+  \item Get the function parameters from the caller: functions can take multiple parameters from various types: Cenary handles only integer type parameters for now, but it handles multiple parameters, as much as caller wants.
   \item After testing and information gathering is finished, execute the function body.
   \item Execute the STOP instruction and return the result (s).
 \end{itemize}
@@ -148,18 +148,18 @@ codegenFunDef (FunStmt sig@(FunSig _mods name args) block retTyAnnot) = do
 \label{deployment}
 Deployment a smart contract in its essence is not directly related to EVM, but is a necessary procedure if we are developing a programming language for writing smart contracts. \\
 There are several useful scripts we use in order to perform a deployment. This is manually done, but we also have an in-progress automated deployment and testing environment being developed in Nix, which we will talk about in details in section \ref{sec:nix_tests}.
-\subsection{Ivy.sh: Shell Scripts}
-While testing Ivy's features, we wrote several shell scripts for convenience and eliminating duplicated work and combined it in the file $ivy.sh$: we now realize that this is actually our compiler script. It has the following functionalities:
+\subsection{Cenary.sh: Shell Scripts}
+While testing Cenary's features, we wrote several shell scripts for convenience and eliminating duplicated work and combined it in the file $cenary.sh$: we now realize that this is actually our compiler script. It has the following functionalities:
 \newpage
 \begin{itemize}
-  \item compile: Compile the Ivy compiler
-  \item ast: Run the ivy compiler on file $stdlib.ivy$ and print only the abstract syntax tree for the syntax in $stdlib.ivy$.
-  \item bytecode: Run the ivy compiler on file $stdlib.ivy$ and print only the bytecode produced from it.
-  \item run: Run the ivy compiler on file $stdlib.ivy$ and also execute it in EVM and print out the results to stdout.
-  \item disasm: Run the ivy compiler on file $stdlib.ivy$ and print out the EVM assembly it produced. This is helpful to track down and debug instructions, especially JUMP instructions.
+  \item compile: Compile the Cenary compiler
+  \item ast: Run the cenary compiler on file $stdlib.cenary$ and print only the abstract syntax tree for the syntax in $stdlib.cenary$.
+  \item bytecode: Run the cenary compiler on file $stdlib.cenary$ and print only the bytecode produced from it.
+  \item run: Run the cenary compiler on file $stdlib.cenary$ and also execute it in EVM and print out the results to stdout.
+  \item disasm: Run the cenary compiler on file $stdlib.cenary$ and print out the EVM assembly it produced. This is helpful to track down and debug instructions, especially JUMP instructions.
   \item deploy: Perform a deployment using the deployment script $deployment/deployment.js$. We mutate this script to insert bytecode, so we create an old version postfixed with $.backup$.
   \item rewind-deploy: Restore $deployment/deployment.js$ with $deployment/deployment.js.backup$.
-  \item compute: Compile the compiler, run it and if it succeeded, deploy it else print a descriptive error message. This is the most frequently used script while testing Ivy's functionalities.
+  \item compute: Compile the compiler, run it and if it succeeded, deploy it else print a descriptive error message. This is the most frequently used script while testing Cenary's functionalities.
 \end{itemize}
 \subsection{Procedure}
 In order to deploy a bytecode, we need a way to communicate with an existing blockchain network. We use testrpc\cite{testrpc} for starting a test network to which we can deploy our smart contracts and in which we can run them. After we have a running network, we are ready to deploy our smart contract which is just a long bytecode. \\
@@ -172,7 +172,7 @@ We won't go in details of the script since it's pretty self-explanatory in terms
 \label{laziness}
 Laziness is an evaluation strategy that is employed by several programming languages, some of them enable it by default and make strict evaluation an option (eg. Haskell\cite{haskell}), and some of them disable it by default and leave it as an option to the programmer to use lazy evaluation (eg. Scala\cite{scala}). \\
 
-Lazy evaluation is basically evaluating expressions when they are needed, not when they are declared. For instance, in Haskell, an expression like $let\ v = 3 + 5$ is not actually computed until we tell compiler that we want the value of $v$. The ``value'' part is important because it's not enough to tell we want $v$, but we want it's ``value'' and also using the fact that it's a integer. What happens if we pass $v$ to a function as parameter, then? It's passed as a $thunk$. A $thunk$ is basically a value that compiler knows how to compute, but is not computed yet. This simple idea lets us come up with various optimizations in Ivy, and they are illustrated in their own sections.
+Lazy evaluation is basically evaluating expressions when they are needed, not when they are declared. For instance, in Haskell, an expression like $let\ v = 3 + 5$ is not actually computed until we tell compiler that we want the value of $v$. The ``value'' part is important because it's not enough to tell we want $v$, but we want it's ``value'' and also using the fact that it's a integer. What happens if we pass $v$ to a function as parameter, then? It's passed as a $thunk$. A $thunk$ is basically a value that compiler knows how to compute, but is not computed yet. This simple idea lets us come up with various optimizations in Cenary, and they are illustrated in their own sections.
 
 By using thunks, we are able to simulate an infinite memory (even if it is not, we don't need to know its limits) (see section \ref{infinite_memory}), we are able to jump to places of which we don't know the program counter yet (see section \ref{lazy_jumping}).
 \subsection{Infinite Memory Model}
@@ -188,7 +188,7 @@ Lazily searching through memory locations makes it easy to allocate array spaces
 Modeling a memory as if it's infinite is of course not something we would use for production, we need a way of saying ``this operation costs more memory than it should'', but for now, we won't have such smart contracts so we can skip this limitation for the time being.
 \subsection{Lazy Jumping}
 \label{lazy_jumping}
-Lazy jumping is the most mind-blowing implementation detail of Ivy, it's also a good way of demonstrating how to model computations which need some future values. We already showed an example of lazy jumping, but now we present more sophisticated examples from the Ivy source code:
+Lazy jumping is the most mind-blowing implementation detail of Cenary, it's also a good way of demonstrating how to model computations which need some future values. We already showed an example of lazy jumping, but now we present more sophisticated examples from the Cenary source code:
 \begin{lstlisting}[label=lazy_while,caption=Lazily Jumped While Loop]
 rec op (PUSH32 (whileOut - offset))
     op JUMPI
@@ -236,7 +236,7 @@ The task of jumping through instructions is actually not a problem with assembly
 
 Lazy evaluation with such usage does not come for free, it has it's own dangerous points. As you can see, we use a function $op()$ everywhere we want to write an instruction. This function actually does not compute the parameter, which is the instruction, but instead it adds the instruction to a accumulating list to be unfolded later. In other words, we create our program which consists of several instructions, and at the end we unfold them into a bytecode. This procedure is required because if we were forcing instructions to be evaluated right away, the dependencies would form an infinite recursion. This is an important aspect of using such computation model.
 \section{Testing}
-In this term, we introduced automated tests for Ivy. We have three source codes for now, each testing different aspects of Ivy sources. A brief summary of tests that currently exist:
+In this term, we introduced automated tests for Cenary. We have three source codes for now, each testing different aspects of Cenary sources. A brief summary of tests that currently exist:
 \begin{enumerate}
   \item Testing parser with a source file with corrupted syntax, which should fail
   \item Testing if branching by different value assignments in each branch then asserting the right one
@@ -252,9 +252,9 @@ We also perform more sophisticated tests with Nix, which will be described in it
 \label{sec:nix_tests}
 Nix\cite{nix} is a purely functional package manager, and NixOS\cite{nixos} is a purely functional linux distribution. We make use of Nix for automated testing. \\
 
-Here is the task of testing a smart contract compiled with Ivy:
+Here is the task of testing a smart contract compiled with Cenary:
 \begin{enumerate}
-  \item Compile Ivy, compile the Ivy source file and extract the bytecode it generates
+  \item Compile Cenary, compile the Cenary source file and extract the bytecode it generates
   \item In a separate machine, run a blockchain test network on a local port
   \item Connect to blockchain network we created in step 2 and run the deployment script with the bytecode we generated in step 1
   \item Get the returned value from the blockchain network and assert whether that value is the expected one, and report a descriptive error message.
@@ -262,20 +262,20 @@ Here is the task of testing a smart contract compiled with Ivy:
 
 These kind of tests where we need several machines with different systemd services (which is used to keep processes alive in unix-like operating systems) involves so much complexity but with a declarative language, it's easy to overcome and this is why we decided on using Nix. \\
 
-With Nix, we first describe two machines, one for blockchain the other one for our client, or programmer who is using Ivy to write smart contracts. A blockchain network wakes up, notifies the client and then client runs the deployment script to connect to blockchain and deploy the contract bytecode. \\
+With Nix, we first describe two machines, one for blockchain the other one for our client, or programmer who is using Cenary to write smart contracts. A blockchain network wakes up, notifies the client and then client runs the deployment script to connect to blockchain and deploy the contract bytecode. \\
 
 Implementation is in progress and can be found in the directory $nix-tests/$.
 
 \section{Conclusion}
-This term was all about improvement and enhancements to the current development environment of Ivy, and also some improvements and simplifications in memory-side. We had opportunities to try to combine different technologies such as web3.js, testrpc and Nix in order to make it easy to test and deploy Ivy programs.
+This term was all about improvement and enhancements to the current development environment of Cenary, and also some improvements and simplifications in memory-side. We had opportunities to try to combine different technologies such as web3.js, testrpc and Nix in order to make it easy to test and deploy Cenary programs.
 \newpage
 \begin{thebibliography}{2}
 \bibitem{CMPE491mtreport}
   CMPE491 Midterm Progress Report:
-  \\ https://github.com/yigitozkavci/ivy/blob/master/standard/report\_491\_midterm/report.pdf
+  \\ https://github.com/yigitozkavci/cenary/blob/master/standard/report\_491\_midterm/report.pdf
 \bibitem{CMPE491finalreport}
   CMPE491 Final Progress Report:
-  \\ https://github.com/yigitozkavci/ivy/blob/master/standard/report\_491\_final/report.pdf
+  \\ https://github.com/yigitozkavci/cenary/blob/master/standard/report\_491\_final/report.pdf
 \bibitem{yellowpaper}
   Yellowpaper: http://yellowpaper.io/
 \bibitem{testrpc}

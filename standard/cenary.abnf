@@ -1,4 +1,4 @@
-; ABNF Syntax for ivy, a programming language for ethereum virtual machine
+; ABNF Syntax for cenary, a programming language for ethereum virtual machine
 ; based on RFC 5234 (https://tools.ietf.org/html/rfc5234).
 
 ; Arithmetic operators

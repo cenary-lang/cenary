@@ -1,4 +1,4 @@
-module Ivy.Codegen.Register
+module Cenary.Codegen.Register
   ( allocRegisters
   , storeReg
   , loadReg
@@ -8,8 +8,8 @@ module Ivy.Codegen.Register
 
 import           Data.Foldable (for_)
 import           Data.Functor (void)
-import           Ivy.Codegen.Types
-import           Ivy.EvmAPI.API
+import           Cenary.Codegen.Types
+import           Cenary.EvmAPI.API
 
 data Register =
     Reg_A

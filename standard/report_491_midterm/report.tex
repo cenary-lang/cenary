@@ -50,9 +50,9 @@
 
 \section{Introduction}
 \par 
-\par This is the midterm report for project Ivy, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
+\par This is the midterm report for project Cenary, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
 \par Ethereum is a decentralized plaform that runs smart contracts: pieces of codes that have the ability to run on any blockchain network. In order to write smart contracts, one should deploy a EVM-executable bytecode into blockchain network, which is not practical since bytecode is a sequence of hex characters; nothing more. To overcome this problem, EVM-compatible programming languages are being designed in order to abstract the problem of having to deploy plain bytecode. 
-\par There are already programming languages targeting EVM, including Solidity\cite{solidity}, Bamboo\cite{bamboo} and Viper\cite{viper}; and Ivy is planning to be a programming language that is easy to use, ability to scale with abstractions and capable of generating an optimised bytecode.
+\par There are already programming languages targeting EVM, including Solidity\cite{solidity}, Bamboo\cite{bamboo} and Viper\cite{viper}; and Cenary is planning to be a programming language that is easy to use, ability to scale with abstractions and capable of generating an optimised bytecode.
 
 \section{Language Constraints by EVM}
 Designing a programming language while targeting EVM has several problems that general purpose programming languages don't. In this section, we will investigate problems that we have / may encounter.
@@ -83,7 +83,7 @@ Designing a programming language while targeting EVM has several problems that g
 \par This is where compiler optimizations are critically important. In the context of smart contracts, compiler optimization is not just about how much of the RAM or CPU of the user you consume, but also the real money of the user you waste in the runtime. We will investigate optimisations in terms of stack operations (see \ref{subsec:stack}) and memory allocations (see \ref{subsec:memory}) in further sections.
 
 \subsection{Entrance Point}
-\par A smart contract has two main phases in its life time: construction and listening. We will illustrate both of them in the following sections, and also explain how to adapt these two distinch phases into Ivy's strategy of logic flow.
+\par A smart contract has two main phases in its life time: construction and listening. We will illustrate both of them in the following sections, and also explain how to adapt these two distinch phases into Cenary's strategy of logic flow.
 \subsubsection{Construction}
 \label{subsubsec:construction}
 \par When a smart contract is deployed on EVM, a code is being executed in the same fashion Java\cite{java} constructs instances of objects described in their class. In this phase, an EVM-oriented programming language should give programmer the address information of the deployer, and let user do whatever they want with it. Typically, users set that address information in object-oriented EVM-targeting languages like Solidity\cite{solidity}
@@ -103,13 +103,13 @@ If one wants to read or update data on a smart contract, they should execute a p
 \lstinputlisting{code/Syntax.hs}
 \subsection{ABNF Syntax}
 \label{subsec:abnf_syntax}
-\lstinputlisting{../ivy.abnf}
+\lstinputlisting{../cenary.abnf}
 \section{Language Implementation}
-This section contains a complete information about the implementation of Ivy from lexing to all the way to code generation \& planned optimisations.
-The compiler of the Ivy language is being implemented in Haskell. Also for lexing, parsing and code generation, no other software is/planning to be used.
+This section contains a complete information about the implementation of Cenary from lexing to all the way to code generation \& planned optimisations.
+The compiler of the Cenary language is being implemented in Haskell. Also for lexing, parsing and code generation, no other software is/planning to be used.
 \subsection{Lexing}
 \label{subsec:lexing}
-Ivy lexer is actually does so little right now: it:
+Cenary lexer is actually does so little right now: it:
 \begin{itemize}
   \item Defines operators (eg. +, *, -, ;, \ldots)
   \item Defines reserved names (eg. if, else, times, endtimes, \ldots)
@@ -119,21 +119,21 @@ Ivy lexer is actually does so little right now: it:
 \newpage
 \subsection{Parsing}
 \label{subsec:parsing}
-Ivy parser is responsible of taking a string and generating the AST of the Ivy language (see \ref{subsec:ast}).
-\par We are using monadic parser combinators inside Parsec library. Ivy parser is a top-down recursive-descent parser with backtracking ability, meaning it can return and try different inputs in the case of an error. In fact, this kind of parsing and error aggregation nicely plays along with monadic parsing.
+Cenary parser is responsible of taking a string and generating the AST of the Cenary language (see \ref{subsec:ast}).
+\par We are using monadic parser combinators inside Parsec library. Cenary parser is a top-down recursive-descent parser with backtracking ability, meaning it can return and try different inputs in the case of an error. In fact, this kind of parsing and error aggregation nicely plays along with monadic parsing.
 \par Advantages of using a monadic parsing hence not using a applicative parsing is beyond this report's scope, but it's indeed a critical decision to make when it comes to using one through parsing of whole compile inputs.
 \par The top-level of our parser is illustrated below:
 \lstinputlisting[language=Haskell]{code/Parser.hs}
 \subsection{Code Generation}
 \label{subsec:code_generation}
-\par Code generation in Ivy language differs from general purpose programming languages in the sense that it \textbf{should} target the EVM platform by creating a big chunk of bytecode. This disallows us from utilising tools like LLVM\cite{llvm} on code generation and optimisation phases.
-\par Code generation module is Ivy's most complex module at the time of writing. It's responsible of receiving an AST (see \ref{subsec:ast}) generated by parser (see \ref{subsec:parsing}) and create a bytecode that will be consumed by EVM.
-\par Ivy's codebase includes a backend for communicating with the low-level EVM code. This EVM API doesn't contain any abstraction (except memory operations; see \ref{subsec:memory} for details), only a type-safe interface for EVM instructions and the code generator makes use of this instraction in its logic flow. Following is an example of usage of EvmAPI module from one of codegen module's consumption:
+\par Code generation in Cenary language differs from general purpose programming languages in the sense that it \textbf{should} target the EVM platform by creating a big chunk of bytecode. This disallows us from utilising tools like LLVM\cite{llvm} on code generation and optimisation phases.
+\par Code generation module is Cenary's most complex module at the time of writing. It's responsible of receiving an AST (see \ref{subsec:ast}) generated by parser (see \ref{subsec:parsing}) and create a bytecode that will be consumed by EVM.
+\par Cenary's codebase includes a backend for communicating with the low-level EVM code. This EVM API doesn't contain any abstraction (except memory operations; see \ref{subsec:memory} for details), only a type-safe interface for EVM instructions and the code generator makes use of this instraction in its logic flow. Following is an example of usage of EvmAPI module from one of codegen module's consumption:
 \newpage
 \lstinputlisting[language=Haskell]{code/Codegen.hs}
 \subsection{Execution}
 \label{subsec:execution}
-In order to execute code, Ivy will be eventually tried in $ebloc$ project of the Boğaziçi University. Now, for debug purposes, we make use of Go\cite{go} implementation of the ethereum virtual machine\cite{ethereum-go}.
+In order to execute code, Cenary will be eventually tried in $ebloc$ project of the Boğaziçi University. Now, for debug purposes, we make use of Go\cite{go} implementation of the ethereum virtual machine\cite{ethereum-go}.
 \subsection{Stack}
 \label{subsec:stack}
 EVM has two components for storing data: stack for temporary data (like taking summation of two numbers), and memory for the rest. Simply, if one wants to store any information that can be used in the future, they should store it in the memory.

@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
 
-module Ivy.Codegen where
+module Cenary.Codegen where
 
 --------------------------------------------------------------------------------
 import           Control.Applicative
@@ -28,13 +28,13 @@ import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
-import           Ivy.Codegen.Procedures
-import           Ivy.Codegen.Register
-import           Ivy.Codegen.Types
-import           Ivy.Crypto.Keccak (keccak256)
-import           Ivy.EvmAPI.AbiBridge
-import           Ivy.EvmAPI.API
-import           Ivy.Syntax
+import           Cenary.Codegen.Procedures
+import           Cenary.Codegen.Register
+import           Cenary.Codegen.Types
+import           Cenary.Crypto.Keccak (keccak256)
+import           Cenary.EvmAPI.AbiBridge
+import           Cenary.EvmAPI.API
+import           Cenary.Syntax
 --------------------------------------------------------------------------------
 
 executeBlock :: CodegenM m => Block -> m ()

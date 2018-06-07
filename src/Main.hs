@@ -1,6 +1,6 @@
 module Main where
 
-import qualified Ivy.Main
+import qualified Cenary.Main
 
 main :: IO ()
-main = Ivy.Main.main
+main = Cenary.Main.main

@@ -4,15 +4,15 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Ivy.EvmAPI.AbiBridge where
+module Cenary.EvmAPI.AbiBridge where
 
 import           Control.Monad.Except
 import           Data.Semigroup ((<>))
 import qualified Data.Text.Lazy as T
 import qualified Evm.Abi as Abi
-import           Ivy.Codegen.Types (CodegenError (..))
-import           Ivy.Error
-import qualified Ivy.Syntax as S
+import           Cenary.Codegen.Types (CodegenError (..))
+import           Cenary.Error
+import qualified Cenary.Syntax as S
 
 toAbiTy :: S.PrimType -> Either String Abi.AbiType
 toAbiTy = \case

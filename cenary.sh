@@ -6,7 +6,7 @@ function compile {
   if ! [[ "$1" = true ]]; then echo "[.] Compilation complete."; fi
 }
 
-EXECUTABLE=./.stack-work/install/x86_64-osx/lts-11.2/8.2.2/bin/ivy
+EXECUTABLE=./.stack-work/install/x86_64-osx/lts-11.2/8.2.2/bin/cenary
 
 function disasm {
   $EXECUTABLE -m disasm -i stdlib.ivy

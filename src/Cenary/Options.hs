@@ -1,4 +1,4 @@
-module Ivy.Options where
+module Cenary.Options where
 
 ------------------------------------------------------
 import           Control.Applicative
@@ -33,8 +33,8 @@ parseMode =
 optParser :: Parser Options
 optParser = Options
         <$> parseMode
-        <*> strOption (long "input" <> short 'i' <> help "Input file that contains ivy code" )
+        <*> strOption (long "input" <> short 'i' <> help "Input file that contains cenary code" )
 
 parseOptions :: IO Options
 parseOptions =
-  execParser (info (optParser <**> helper) (fullDesc <> progDesc "Ivy" ))
+  execParser (info (optParser <**> helper) (fullDesc <> progDesc "Cenary" ))

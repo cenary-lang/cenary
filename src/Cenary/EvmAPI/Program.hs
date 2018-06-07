@@ -1,10 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Ivy.EvmAPI.Program where
+module Cenary.EvmAPI.Program where
 
 import           Control.Lens
 import qualified Data.Sequence as Seq
-import           Ivy.EvmAPI.Instruction (Instruction (..))
+import           Cenary.EvmAPI.Instruction (Instruction (..))
 
 -- | TODO: This should have its own module
 newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }

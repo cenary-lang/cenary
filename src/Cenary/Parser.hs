@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module Ivy.Parser where
+module Cenary.Parser where
 
 --------------------------------------------------------------------------------
 import           Data.Functor
@@ -13,8 +13,8 @@ import           Text.Parsec as P
 import           Text.Parsec.Expr
 import           Text.Parsec.String (Parser)
 --------------------------------------------------------------------------------
-import           Ivy.Lexer
-import           Ivy.Syntax
+import           Cenary.Lexer
+import           Cenary.Syntax
 --------------------------------------------------------------------------------
 
 char' :: Char -> Parser ()

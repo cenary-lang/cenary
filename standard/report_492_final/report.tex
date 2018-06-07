@@ -50,8 +50,8 @@
 
 \section{Introduction}
 \par 
-\par This is the CMPE492 final progress report for project Ivy, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
-\par This report represents the conclusion of the 1-year progress of Ivy.
+\par This is the CMPE492 final progress report for project Cenary, a programming language for writing smart contracts on Ethereum Virtual Machine (will be referred as EVM from now on).
+\par This report represents the conclusion of the 1-year progress of Cenary.
 
 \par This term's work focused on runtime representation of various newly-introduced data structures such as dynamic arrays and hashmaps. Aside from dynamic data structures, we also improved our development workflow, introduced several test scenarios.
 
@@ -63,12 +63,12 @@ When it comes to representing dynamic data structures, EVM actually is not so di
 \label{memory}
 MEMORY is the temporary memory for ethereum smart contracts. It's cheap to use incrementally, but there is an important detail in using memory: when a contract is deployed, the farthest location we allocate is considered the memory limit we allocate, hence we need to make use of memory very carefully. So if we were to only allocate memory location 0x2460, contract is said to allocate 0x2460 x 0x20 bytes of memory, so it's crucial that we make use of every part until the maximum point of memory allocation.
 \subsection{STORAGE}
-Storage is the persistent memory for ethereum smart contracts. We represent storage varibables as global variables in Ivy. Storage is generally very expensive to use, but for it's also a much better way to store hashmaps because of how MEMORY works in EVM. (see \ref{memory}). We will discuss how we store hashmaps and compute hashing function later in section \ref{hashmaps}
+Storage is the persistent memory for ethereum smart contracts. We represent storage varibables as global variables in Cenary. Storage is generally very expensive to use, but for it's also a much better way to store hashmaps because of how MEMORY works in EVM. (see \ref{memory}). We will discuss how we store hashmaps and compute hashing function later in section \ref{hashmaps}
 
 \section{Dynamic Data Structures}
 \subsection{Runtime Representation}
 \label{runtime-rep}
-In order to represent dynamic data structures, we first needed to change our representation of operands, which correspond to mostly right-hand side in the context of Ivy. Until now, we evaluated our operands, stored them then got their addresses in compile-time. But as you might imaginge, it's impossible to know address of a runtime variable at compile time. Because of this limitation, we started no longer storing operand addresses, but instead, have their values in our stack. So for a statement like this: $int\ a = 5;$, we first evaluate 5, which is $EInt\ 5$, we push $0x05$ to stack then return; after having evaluated the operand, we store the first element of stack (which is 5 in this case) in the address of $a$. This part is crucial: we always store variable addresses in our lookup table, but for the operands, we may or may not know the address, so they are represented in stack instead.
+In order to represent dynamic data structures, we first needed to change our representation of operands, which correspond to mostly right-hand side in the context of Cenary. Until now, we evaluated our operands, stored them then got their addresses in compile-time. But as you might imaginge, it's impossible to know address of a runtime variable at compile time. Because of this limitation, we started no longer storing operand addresses, but instead, have their values in our stack. So for a statement like this: $int\ a = 5;$, we first evaluate 5, which is $EInt\ 5$, we push $0x05$ to stack then return; after having evaluated the operand, we store the first element of stack (which is 5 in this case) in the address of $a$. This part is crucial: we always store variable addresses in our lookup table, but for the operands, we may or may not know the address, so they are represented in stack instead.
 \subsection{Arrays}
 \label{arrays}
 Representing arrays in heap space required planning since we needed a well-defined structure for storage. We decided on the following pattern:
@@ -128,7 +128,7 @@ Task of resizing arrays branches into 2 distinct parts: when we want to shrink i
 \subsection{Runtime Exceptions (Halting)}
 With the coming of runtime data structures, the concept of runtime exceptions arose. If someone tries to reach to a non-existing index of an array, we can currently detect it since we keep the length information in heap, and we have the indexing operand at hand. With $LT, GT and EQ$ instructions, we can compare the index with the existing length and determine whether someone tries to access an out of bound index of an array. In this case, we print a log message (event in Solidity terminology) and halt the execution, hence ending the transaction.
 
-\par If we don't control this scenario, user was going to receive the value 0x00 without noticing s/he actually made a mistake; this is a case we want to avoid since in the philosophy of Ivy, we have safety in mind.
+\par If we don't control this scenario, user was going to receive the value 0x00 without noticing s/he actually made a mistake; this is a case we want to avoid since in the philosophy of Cenary, we have safety in mind.
 
 \par In the case of hashmaps and accessing a non-existing key, we don't check it since smart contract developers are used to Solidity conventions, which keeps saying ``when a hashmap is created, every value is filled with zeros'', hence no access violate the hashmap lookup. This state might change in future.
 \label{runtime-exceptions}
@@ -137,31 +137,31 @@ With the coming of runtime data structures, the concept of runtime exceptions ar
 \label{logging}
 \par EVM provides several instructions for working with logging, and they are surprisingly rich in terms of categorisation. We can optionally include topics in our logs, and we can put anything we want as topics (limitation is 0x20/32 bytes). For the contents of logs, we don't put the contents of logs to stack as an input to LOG instructions, but instead, we put the address limits of the content. So if we want to log some content, we need to have it in memory, and specify its beginning and ending address as an input to instruction. This is actually a very clever way of representing can-be-large content since we can use up to 32 bytes as address.
 
-\par With out javascript client which makes our deployment easy for us, we currently collect logs from every running Ivy transaction and display it. This is a \textbf{very} helpful way of debugging programs, since we now have a way of seeing actual runtime values for any Ivy programs, which would have been impossible without the logs since runtime is theoretically in any computer.
+\par With out javascript client which makes our deployment easy for us, we currently collect logs from every running Cenary transaction and display it. This is a \textbf{very} helpful way of debugging programs, since we now have a way of seeing actual runtime values for any Cenary programs, which would have been impossible without the logs since runtime is theoretically in any computer.
 
 \section{Compiler Features}
 \subsection{Testing}
-In the Spring 2018 term, we greatly improved our testing suite. We currently have 13 testing scenarios and for each one we start a test network, deploy our contract and run the transaction then collect and assert the result. It's currently very easy to write tests on ivy: one just needs to modify $test/assertions$ file and it's good to go. The file currently has the following structure:
+In the Spring 2018 term, we greatly improved our testing suite. We currently have 13 testing scenarios and for each one we start a test network, deploy our contract and run the transaction then collect and assert the result. It's currently very easy to write tests on cenary: one just needs to modify $test/assertions$ file and it's good to go. The file currently has the following structure:
 \lstinputlisting[language=bash]{../../test/assertions}
 
 \newpage
 \subsection{Showing AST}
-Ivy compiler can also perform other tasks than actually compiling and running tests. It can show only the Abstract Syntax Tree of the ivy program given as input. This is a powerful feature that we have for free when we modulate the compiling pipeline good enough. As we described in older reports, we have the following pipeline: $lexing\ -> parsing\ -> code\ generation$.
+Cenary compiler can also perform other tasks than actually compiling and running tests. It can show only the Abstract Syntax Tree of the cenary program given as input. This is a powerful feature that we have for free when we modulate the compiling pipeline good enough. As we described in older reports, we have the following pipeline: $lexing\ -> parsing\ -> code\ generation$.
 \subsection{Showing Bytecode}
 After generating the bytecode necessary for EVM to run, we can display it without running it; but one has to be careful: generating the bytecode requires the actually code generation phase, which means code will be wholly evaluated and type-checked before we can evaluate the code.
 \par The generated bytecode then can be safely used to deploy the contract with accompanied ABI (see \ref{abi-module}).
 \subsection{Showing Disasm}
-Another important feature of Ivy compiler is that we can make it show the EVM assembly code that will be generated for a Ivy source. This is especially helpful to debug smaller programs, but it's increasingly difficult to debug larger programs since potentially assembly code can grow into 6000+ lines of assembly.
+Another important feature of Cenary compiler is that we can make it show the EVM assembly code that will be generated for a Cenary source. This is especially helpful to debug smaller programs, but it's increasingly difficult to debug larger programs since potentially assembly code can grow into 6000+ lines of assembly.
 \subsection{ABI Module}
 \label{abi-module}
-ABI stands for Application Binary Interface, which is a specification of callable functions and their input/outputs in json format. In order to make deployment painless, a good smart contract compiler should be able to generate ABI for any of its program, and Ivy can do that. With modules $Ivy.ABI$ and $Ivy.AbiBridge$, we can transform our AST to ABI and json-encode it before deployment. Just before every deployment, Ivy compiler encodes the abi for given program and substitutes a pre-decided string (@abi@ in our case) in our deployment script. This is currently a dirty way of handling deployment, but it does its job and we've already written several smart contracts this way.
-\par Being able to transform AST to ABI with just one pure function and being able to collect errors is a powerful feature we use thanks to Haskell language. In fact, in the $Ivy.AbiBridge$ module, we don't even know the details of how to convert an AST to ABI, we just call the $Ivy.ABI$ module's function and that's it.
+ABI stands for Application Binary Interface, which is a specification of callable functions and their input/outputs in json format. In order to make deployment painless, a good smart contract compiler should be able to generate ABI for any of its program, and Cenary can do that. With modules $Cenary.ABI$ and $Cenary.AbiBridge$, we can transform our AST to ABI and json-encode it before deployment. Just before every deployment, Cenary compiler encodes the abi for given program and substitutes a pre-decided string (@abi@ in our case) in our deployment script. This is currently a dirty way of handling deployment, but it does its job and we've already written several smart contracts this way.
+\par Being able to transform AST to ABI with just one pure function and being able to collect errors is a powerful feature we use thanks to Haskell language. In fact, in the $Cenary.AbiBridge$ module, we don't even know the details of how to convert an AST to ABI, we just call the $Cenary.ABI$ module's function and that's it.
 
 \newpage
 
 \section{Conclusion}
-This report concludes the development of Ivy as a senior project in Boğaziçi University. Development of Ivy will continue, and we can see Ivy as a viable alternative to other smart contract languages out there in the future.
-\par Future plans for Ivy includes the language IvyIR. We plan the current Ivy to be a intermediate representation (IR) language, and a new language called Ivy will be built upon IvyIR as a high level pure functional language. This way, we continue developing Ivy and IvyIR in parallel, with Ivy facing towards the user, and IvyIR getting more and more low-level, and ideally, we stop the development of IvyIR and only continue developing Ivy since the only mission of the IvyIR will be to be an imperative bridge between EVM assembly and Ivy. For this very task, we wanted to keep Ivy's syntax very lightweight and c-like since the compiler will be the one who generates code in this language.
+This report concludes the development of Cenary as a senior project in Boğaziçi University. Development of Cenary will continue, and we can see Cenary as a viable alternative to other smart contract languages out there in the future.
+\par Future plans for Cenary includes the language CenaryIR. We plan the current Cenary to be a intermediate representation (IR) language, and a new language called Cenary will be built upon CenaryIR as a high level pure functional language. This way, we continue developing Cenary and CenaryIR in parallel, with Cenary facing towards the user, and CenaryIR getting more and more low-level, and ideally, we stop the development of CenaryIR and only continue developing Cenary since the only mission of the CenaryIR will be to be an imperative bridge between EVM assembly and Cenary. For this very task, we wanted to keep Cenary's syntax very lightweight and c-like since the compiler will be the one who generates code in this language.
 \newpage
 \begin{thebibliography}{2}
 \bibitem{hash-table-poisoning}

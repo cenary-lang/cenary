@@ -1,4 +1,4 @@
-module Ivy.EvmAPI.Instruction
+module Cenary.EvmAPI.Instruction
   (Instruction (..)
   ) where
 

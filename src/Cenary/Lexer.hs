@@ -1,11 +1,11 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
-module Ivy.Lexer where
+module Cenary.Lexer where
 
 --------------------------------------------------------------------------------
 import qualified Text.Parsec.Token as Tok
 --------------------------------------------------------------------------------
-import           Ivy.Lexer.Language (style)
+import           Cenary.Lexer.Language (style)
 --------------------------------------------------------------------------------
 
 lexer :: Tok.TokenParser ()

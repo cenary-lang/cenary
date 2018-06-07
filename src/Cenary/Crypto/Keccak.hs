@@ -1,4 +1,4 @@
-module Ivy.Crypto.Keccak where
+module Cenary.Crypto.Keccak where
 
 import           Crypto.Hash (Digest, Keccak_256, hash)
 import qualified Data.ByteString as BS

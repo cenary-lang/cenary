@@ -10,7 +10,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
 
-module Ivy.Codegen.Types where
+module Cenary.Codegen.Types where
 
 --------------------------------------------------------------------------------
 import           Control.Lens hiding (Context, contexts)
@@ -21,10 +21,10 @@ import           Data.Semigroup ((<>))
 import qualified Data.Sequence as Seq
 import           Prelude hiding (lookup)
 --------------------------------------------------------------------------------
-import           Ivy.EvmAPI.API
-import           Ivy.EvmAPI.Instruction (Instruction (..))
-import           Ivy.EvmAPI.Program
-import           Ivy.Syntax (Expr, Name, PrimType (..), Stmt)
+import           Cenary.EvmAPI.API
+import           Cenary.EvmAPI.Instruction (Instruction (..))
+import           Cenary.EvmAPI.Program
+import           Cenary.Syntax (Expr, Name, PrimType (..), Stmt)
 --------------------------------------------------------------------------------
 
 data FuncRegistryArgInfo = FuncRegistryArgInfo

@@ -5,15 +5,15 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Ivy.Codegen.Procedures where
+module Cenary.Codegen.Procedures where
 
 import           Control.Lens hiding (op)
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Data.Semigroup ((<>))
-import           Ivy.Codegen.Types
-import           Ivy.EvmAPI.API
-import           Ivy.Syntax
+import           Cenary.Codegen.Types
+import           Cenary.EvmAPI.API
+import           Cenary.Syntax
 
 -- Input: [A: Operand Value]
 -- Output: [keccak256 of input A]
