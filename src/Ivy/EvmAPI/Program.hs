@@ -2,9 +2,9 @@
 
 module Ivy.EvmAPI.Program where
 
-import Ivy.EvmAPI.Instruction (Instruction (..))
+import           Control.Lens
 import qualified Data.Sequence as Seq
-import Control.Lens
+import           Ivy.EvmAPI.Instruction (Instruction (..))
 
 -- | TODO: This should have its own module
 newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }

@@ -1,18 +1,19 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Ivy.Codegen.Procedures where
 
-import Ivy.Codegen.Types
-import Ivy.Syntax
-import Ivy.EvmAPI.API
-import Control.Monad.State
-import Control.Lens hiding (op)
-import Data.Semigroup ((<>))
-import Control.Monad.Except
+import           Control.Lens hiding (op)
+import           Control.Monad.Except
+import           Control.Monad.State
+import           Data.Semigroup ((<>))
+import           Ivy.Codegen.Types
+import           Ivy.EvmAPI.API
+import           Ivy.Syntax
 
 -- Input: [A: Operand Value]
 -- Output: [keccak256 of input A]

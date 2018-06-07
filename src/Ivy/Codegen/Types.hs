@@ -1,33 +1,34 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE FlexibleContexts            #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Ivy.Codegen.Types where
 
 --------------------------------------------------------------------------------
 import           Control.Lens hiding (Context, contexts)
-import Prelude hiding (lookup)
 import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.Map as M
 import           Data.Semigroup ((<>))
 import qualified Data.Sequence as Seq
+import           Prelude hiding (lookup)
 --------------------------------------------------------------------------------
-import           Ivy.Syntax (Expr, PrimType (..), Stmt, Name)
-import Ivy.EvmAPI.Instruction (Instruction (..))
-import Ivy.EvmAPI.Program
-import Ivy.EvmAPI.API
+import           Ivy.EvmAPI.API
+import           Ivy.EvmAPI.Instruction (Instruction (..))
+import           Ivy.EvmAPI.Program
+import           Ivy.Syntax (Expr, Name, PrimType (..), Stmt)
 --------------------------------------------------------------------------------
 
 data FuncRegistryArgInfo = FuncRegistryArgInfo
-  { _argTy :: PrimType
+  { _argTy   :: PrimType
   , _argName :: String
   }
 
@@ -48,7 +49,7 @@ type Context = M.Map String (PrimType, Address)
 data Sig = Sig String [(PrimType, String)] PrimType
 
 data Env = Env
-  { _sig :: Sig
+  { _sig      :: Sig
   , _contexts :: [Context] -- Essentially a stack
   }
 
@@ -93,7 +94,7 @@ instance ContextM Evm where
       where
         updateCtx' _ []       = []
         updateCtx' f (ctx:xs) = case f ctx of
-          (True, newCtx) -> newCtx : xs
+          (True, newCtx)  -> newCtx : xs
           (False, oldCtx) -> oldCtx : updateCtx' f xs
   lookup name =
     go =<< _contexts <$> use env

@@ -6,10 +6,10 @@ module Ivy.Codegen.Register
   , Register (..)
   ) where
 
-import Data.Foldable (for_)
-import Ivy.EvmAPI.API
-import Data.Functor (void)
-import Ivy.Codegen.Types
+import           Data.Foldable (for_)
+import           Data.Functor (void)
+import           Ivy.Codegen.Types
+import           Ivy.EvmAPI.API
 
 data Register =
     Reg_A

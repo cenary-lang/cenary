@@ -1,18 +1,18 @@
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE RebindableSyntax     #-}
+{-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RebindableSyntax #-}
 
 module Ivy.EvmAPI.StackTL where
 
-import GHC.TypeLits
-import Control.Monad.Indexed
-import Prelude hiding ((>>))
+import           Control.Monad.Indexed
+import           GHC.TypeLits
+import           Prelude hiding ((>>))
 
 data StackElem = Jumpdest
 
@@ -47,7 +47,7 @@ newtype IxState is os a = IxState { runIState :: is -> (os, a) }
 
 instance IxFunctor IxState where
   imap f (IxState stateF) = IxState $ \is ->
-    let (os, a) = stateF is 
+    let (os, a) = stateF is
      in (os, f a)
 
 instance IxPointed IxState where

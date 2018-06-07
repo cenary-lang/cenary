@@ -17,14 +17,14 @@ data Mode = Ast | ByteCode | Run | Disasm | Asm | Deploy | RewindDeploy
   deriving Show
 
 instance IsString Mode where
-  fromString "ast"      = Ast
-  fromString "bytecode" = ByteCode
-  fromString "run"      = Run
-  fromString "disasm"   = Disasm
-  fromString "asm"      = Asm
-  fromString "deploy"   = Deploy
-  fromString "rewind-deploy"   = RewindDeploy
-  fromString _          = Run
+  fromString "ast"           = Ast
+  fromString "bytecode"      = ByteCode
+  fromString "run"           = Run
+  fromString "disasm"        = Disasm
+  fromString "asm"           = Asm
+  fromString "deploy"        = Deploy
+  fromString "rewind-deploy" = RewindDeploy
+  fromString _               = Run
 
 parseMode :: Parser Mode
 parseMode =

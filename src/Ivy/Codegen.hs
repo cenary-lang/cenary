@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -11,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 module Ivy.Codegen where
 
@@ -21,20 +21,20 @@ import           Control.Monad.Except
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
 import           Data.Foldable (traverse_)
+import           Data.Functor (($>))
 import           Data.List (intercalate)
-import Data.Functor (($>))
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
-import           Ivy.EvmAPI.AbiBridge
+import           Ivy.Codegen.Procedures
+import           Ivy.Codegen.Register
 import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
+import           Ivy.EvmAPI.AbiBridge
 import           Ivy.EvmAPI.API
 import           Ivy.Syntax
-import           Ivy.Codegen.Register
-import           Ivy.Codegen.Procedures
 --------------------------------------------------------------------------------
 
 executeBlock :: CodegenM m => Block -> m ()
@@ -110,7 +110,7 @@ codegenStmt (SAssignment name val) = do
   assignFromStack tyR name
 
 codegenStmt (SMapAssignment name key valExpr) = do
-  Operand tyR <- codegenExpr valExpr 
+  Operand tyR <- codegenExpr valExpr
   -- [RHSVal]
   lookup name >>= \case
     NotDeclared ->
@@ -323,7 +323,7 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
                 push32 (addr + 0x20)
                 push32 addr
                 op_return
-                
+
           branchIfElse (offset)
                        (loadReg Reg_FunCall)
                        (internalCall)
@@ -455,7 +455,7 @@ codegenExpr (EBool val) = do
   push32 (bool_to_int val)
   return (Operand TBool)
   where
-    bool_to_int True = 1
+    bool_to_int True  = 1
     bool_to_int False = 0
 
 codegenExpr (EBinop binop expr1 expr2) = do
@@ -588,7 +588,7 @@ bodyPhase
   => AST
   -> m ()
 bodyPhase stmts = do
-  -- We use first 32 bytes (between 0x00 and 0x20) to determine 
+  -- We use first 32 bytes (between 0x00 and 0x20) to determine
   -- whether a function is called internally or from outside
   allocRegisters
   rec

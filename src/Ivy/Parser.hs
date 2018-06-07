@@ -244,7 +244,7 @@ sResize = do
       whitespace >> char' ',' >> whitespace
       size <- expr
       return (SResize id' size)
-  
+
 funModifier :: Parser FunModifier
 funModifier =
   reserved "pure" $> PureModifier

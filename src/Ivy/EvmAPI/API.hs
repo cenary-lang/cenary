@@ -54,10 +54,10 @@ module Ivy.EvmAPI.API
   ) where
 
 import           Data.Monoid ((<>))
+import           Ivy.EvmAPI.Instruction (Instruction (..))
+import           Ivy.EvmAPI.Program (Program (..))
 import           Prelude hiding (EQ, GT, LT, div, exp, mod)
 import           Text.Printf
-import Ivy.EvmAPI.Instruction (Instruction (..))
-import Ivy.EvmAPI.Program (Program (..))
 
 type Opcode = Integer
 

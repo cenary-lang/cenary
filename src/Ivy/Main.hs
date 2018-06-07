@@ -21,13 +21,14 @@ import           System.IO (hClose)
 import           System.Process hiding (env)
 import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
-import qualified Ivy.EvmAPI.AbiBridge as AbiBridge
 import qualified Ivy.Codegen as C
-import           Ivy.Codegen.Types (CodegenState (..), Env (..), Sig (..),
-                                    initProgram, runEvm, FuncRegistry (..))
+import           Ivy.Codegen.Types (CodegenState (..), Env (..),
+                                    FuncRegistry (..), Sig (..), initProgram,
+                                    runEvm)
 import           Ivy.Deployment (prepareDeployment, rewindDeployment,
                                  runDeployment)
 import           Ivy.Error
+import qualified Ivy.EvmAPI.AbiBridge as AbiBridge
 import           Ivy.EvmAPI.API (generateByteCode)
 import           Ivy.Options (Mode (..), Options (..), parseOptions)
 import qualified Ivy.Parser as P
