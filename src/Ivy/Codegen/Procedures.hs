@@ -11,11 +11,13 @@ import Ivy.Syntax
 import Ivy.EvmAPI.API
 import Control.Monad.State
 import Control.Lens hiding (op)
+import Data.Semigroup ((<>))
+import Control.Monad.Except
 
 -- Input: [A: Operand Value]
 -- Output: [keccak256 of input A]
-applyHashingFunction :: CodegenM m => Integer -> VariablePersistence -> PrimType -> m ()
-applyHashingFunction order persistence = \case
+applyHashingFunction :: CodegenM m => Integer -> PrimType -> m ()
+applyHashingFunction order = \case
   TInt -> do
     -- [Value]
     valAddr <- alloc Temporary
@@ -56,11 +58,12 @@ applyHashingFunction order persistence = \case
     swap1 -- [(ArrLength + 2) * 0x20, StackAddr]
     load' Temporary -- [(ArrLength + 2) * 0x20, HeapAddr]
     sha3 -- [SHA3]
+  otherTy -> throwError $ InternalError $ "Hashing function is not yet implemented for type " <> show otherTy
 
 -- Input: [StackAddr, NewSize]
 -- Output: []
 startResizingProcedure
-  :: forall m. CodegenM m
+  :: CodegenM m
   => VariablePersistence
   -> m ()
 startResizingProcedure persistence = do
@@ -77,57 +80,59 @@ startResizingProcedure persistence = do
     )
     -- new size is bigger, allocate new array space
     -- [StackAddr, NewSize] | NewSize > OldSize
-    (moveToNewArrAddr offset persistence)
+    (expandArr offset persistence)
     -- [StackAddr, NewSize] | NewSize <= OldSize
     (swap1 >> load' persistence >> store' persistence) -- new size is smaller, just set the length identifier address
-  where
-    moveToNewArrAddr :: Integer -> VariablePersistence -> m ()
-    moveToNewArrAddr offset persistence = do
-      -- [StackAddr, NewSize]
-      rec heapBegin <- use heapSpaceBegin
-          push32 heapBegin
-          load' persistence -- [StackAddr, NewSize, NewAddr]
-          swap1 -- [StackAddr, NewAddr, NewSize]
-          dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
-          store' persistence -- [StackAddr, NewAddr]
-          swap1 -- [NewAddr, StackAddr]
-          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
-          dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
 
-          loopBegin <- jumpdest
+-- Input: [StackAddr, NewSize]
+-- Output: []
+expandArr :: CodegenM m => Integer -> VariablePersistence -> m ()
+expandArr offset persistence = do
+  -- [StackAddr, NewSize]
+  rec heapBegin <- use heapSpaceBegin
+      push32 heapBegin
+      load' persistence -- [StackAddr, NewSize, NewAddr]
+      swap1 -- [StackAddr, NewAddr, NewSize]
+      dup2 -- [StackAddr, NewAddr, NewSize, NewAddr]
+      store' persistence -- [StackAddr, NewAddr]
+      swap1 -- [NewAddr, StackAddr]
+      dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr]
+      dup1 >> load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
 
-          -- Test for loop
-          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
-          (push32 0 >> lt) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize > 0]
-          iszero -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0]
-          push32 (loopEnd - offset) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0, loopEnd]
-          jumpi -- [NewAddr, StackAddr, OldAddr, OldSize]
+      loopBegin <- jumpdest
 
-          -- Loop body
-          -- [NewAddr, StackAddr, OldAddr, OldSize]
-          dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
-          (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20]
-          dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20, OldAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, 0x20 * OldSize + oldAddr]
-          load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1]]
-          dup2 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize]
-          push32 0x20 >> mul -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20]
-          dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20, NewAddr]
-          add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20 + NewAddr]
-          store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
-          dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
+      -- Test for loop
+      dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
+      (push32 0 >> lt) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize > 0]
+      iszero -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0]
+      push32 (loopEnd - offset) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize <= 0, loopEnd]
+      jumpi -- [NewAddr, StackAddr, OldAddr, OldSize]
 
-          -- Jump back to beginning of loop
-          push32 (loopBegin - offset)
-          jump
+      -- Loop body
+      -- [NewAddr, StackAddr, OldAddr, OldSize]
+      dup1 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize]
+      (push32 0x20 >> mul) -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20]
+      dup3 -- [NewAddr, StackAddr, OldAddr, OldSize, OldSize * 0x20, OldAddr]
+      add -- [NewAddr, StackAddr, OldAddr, OldSize, 0x20 * OldSize + oldAddr]
+      load' persistence -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1]]
+      dup2 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize]
+      push32 0x20 >> mul -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20]
+      dup6 -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20, NewAddr]
+      add -- [NewAddr, StackAddr, OldAddr, OldSize, oldAddr[size-1], OldSize * 0x20 + NewAddr]
+      store' persistence -- [NewAddr, StackAddr, OldAddr, OldSize]
+      dec 0x01 -- [NewAddr, StackAddr, OldAddr, OldSize - 1]
 
-          -- End of the loop
-          loopEnd <- jumpdest
-          -- [NewAddr, StackAddr, OldAddr, 0]
-          (pop >> pop) -- [NewAddr, StackAddr]
-          -- swap1 >> dec 0x20 >> swap1 -- [NewAddr - 0x20, StackAddr]
-          store' persistence -- []
-      pure ()
+      -- Jump back to beginning of loop
+      push32 (loopBegin - offset)
+      jump
+
+      -- End of the loop
+      loopEnd <- jumpdest
+      -- [NewAddr, StackAddr, OldAddr, 0]
+      (pop >> pop) -- [NewAddr, StackAddr]
+      -- swap1 >> dec 0x20 >> swap1 -- [NewAddr - 0x20, StackAddr]
+      store' persistence -- []
+  pure ()
 
 jumpdest :: (OpcodeM m, MonadState CodegenState m) => m Integer
 jumpdest = use pc <* op JUMPDEST

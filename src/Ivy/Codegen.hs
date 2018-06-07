@@ -22,13 +22,13 @@ import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
 import           Data.Foldable (traverse_)
 import           Data.List (intercalate)
+import Data.Functor (($>))
 import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import           Prelude hiding (EQ, GT, LT, div, exp, log, lookup, mod, pred,
                           until)
 --------------------------------------------------------------------------------
 import           Ivy.EvmAPI.AbiBridge
-import           Ivy.Codegen.Memory
 import           Ivy.Codegen.Types
 import           Ivy.Crypto.Keccak (keccak256)
 import           Ivy.EvmAPI.API
@@ -36,74 +36,6 @@ import           Ivy.Syntax
 import           Ivy.Codegen.Register
 import           Ivy.Codegen.Procedures
 --------------------------------------------------------------------------------
-
-instance ContextM Evm where
-  updateCtx f' =
-    env %= (contexts %~ updateCtx' f')
-      where
-        updateCtx' _ []       = []
-        updateCtx' f (ctx:xs) = case f ctx of
-          (True, newCtx) -> newCtx : xs
-          (False, oldCtx) -> oldCtx : updateCtx' f xs
-  lookup name =
-    go =<< _contexts <$> use env
-    where
-      go :: [Context] -> Evm (VariableStatus VarsVar)
-      go [] = return NotDeclared
-      go (ctx:xs) =
-        case M.lookup name ctx of
-          Just (varTy, VarAddr varAddr persistence) -> decideVar (varTy, varAddr) persistence
-          Just _ -> throwError $ InternalError $ "Another case for context (1)"
-          Nothing -> go xs
-        where
-          decideVar (ty, Nothing)   p = return (Decl ty p)
-          decideVar (ty, Just addr) p = return (Def ty addr p)
-  lookupFun name =
-    go =<< _contexts <$> use env
-      where
-        go [] = return NotDeclared
-        go (ctx:xs) =
-          case M.lookup name ctx of
-            Just (TFun retTy, FunAddr funAddr) -> return (FunDef retTy funAddr)
-            Just _ -> throwError $ InternalError $ "Another case for context (2)"
-            Nothing -> go xs
-  createCtx = env %= (contexts %~ (M.empty :))
-  popCtx = env %= (contexts %~ tail)
-  updateSig sig' = env %= (sig .~ sig')
-  ctxDeclareVar name ty persistence =
-    lookup name >>= \case
-      NotDeclared -> do
-        updateCtx ((True,) . M.insert name (ty, VarAddr Nothing persistence))
-        case ty of
-          TMap _ _ -> do
-            addr <- alloc persistence
-            createMappingOrder name
-            ctxDefineVar name addr
-          _ -> pure ()
-        
-      Decl _ _ ->
-        throwError $ InternalError $ "TODO (2)"
-      Def _ _ _ ->
-        throwError $ InternalError $ "TODO (3)"
-  ctxDefineVar name addr =
-    lookup name >>= \case
-      NotDeclared -> throwError (VariableNotDeclared name (TextDetails "ctxDefineVar"))
-      Decl tyL persistence -> do
-        updateCtx $ \ctx ->
-          case M.lookup name ctx of
-            Nothing ->
-              (False, ctx)
-            Just _ ->
-              (True, M.update (const (Just (tyL, VarAddr (Just addr) persistence))) name ctx)
-      Def _ _ _ -> throwError $ InternalError $ "TODO (1)"
-  ctxDefineFunc name retTy funPc =
-    updateCtx ((True,) . M.insert name (TFun retTy, FunAddr funPc))
-
-binOp :: (OpcodeM m, MemoryM m) => PrimType -> m () -> m Operand
-binOp t op = do
-  -- We should have addresses of left and right operands, in this order by now.
-  op
-  return (Operand t)
 
 executeBlock :: CodegenM m => Block -> m ()
 executeBlock (Block stmts) = do
@@ -185,7 +117,8 @@ codegenStmt (SMapAssignment name key valExpr) = do
       throwError (VariableNotDeclared name (TextDetails "SMapAssignment"))
     Decl _ _ ->
       throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
-    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+    Def (TMap tyAnnotKey tyAnnotVal) _ persistence -> do
+      when (persistence /= Permanent) $ throwError $ InternalError "Persistence of mappings should be Permanent, not Temporary"
       checkTyEq name tyAnnotVal tyR
       Operand tyKey <- codegenExpr key
       -- [RHSVal, KeyVal]
@@ -195,8 +128,11 @@ codegenStmt (SMapAssignment name key valExpr) = do
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order -> do
           -- [RHSVal, KeyVal]
-          applyHashingFunction order persistence tyKey -- [RHSVal, SHA]
-          store' persistence
+          applyHashingFunction order tyKey -- [RHSVal, SHA]
+          store' Permanent
+    Def other _ _ ->
+      throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other
+
 
 codegenStmt stmt@(SArrAssignment name index val) = do
   offset <- use funcOffset
@@ -528,14 +464,14 @@ codegenExpr (EBinop binop expr1 expr2) = do
   operation <- case (ty1, ty2) of
     (TInt, TInt) -> pure $
       case binop of
-        OpAdd -> binOp TInt add
-        OpMul -> binOp TInt mul
-        OpSub -> binOp TInt sub
-        OpDiv -> binOp TInt div
-        OpMod -> binOp TInt mod
-        OpGt  -> binOp TBool gt
-        OpLt  -> binOp TBool lt
-        OpEq  -> binOp TBool eq
+        OpAdd -> add $> Operand TInt
+        OpMul -> mul $> Operand TInt
+        OpSub -> sub $> Operand TInt
+        OpDiv -> div $> Operand TInt
+        OpMod -> mod $> Operand TInt
+        OpGt  -> gt  $> Operand TBool
+        OpLt  -> lt  $> Operand TBool
+        OpEq  -> eq  $> Operand TBool
     _ -> throwError $ WrongOperandTypes ty1 ty2
   operation
 
@@ -595,7 +531,7 @@ codegenExpr (EMapIdentifier name key) = do
       throwError (VariableNotDeclared name (TextDetails "EMapIdentifier"))
     Decl _ _ ->
       throwError $ InternalError $ "No mapping should be in Decl state but " <> name <> " is."
-    Def (TMap tyAnnotKey tyAnnotVal) addr persistence -> do
+    Def (TMap tyAnnotKey tyAnnotVal) _ persistence -> do
       Operand tyKey <- codegenExpr key
       checkTyEq name tyAnnotKey tyKey
       lookupMappingOrder name >>= \case
@@ -603,9 +539,11 @@ codegenExpr (EMapIdentifier name key) = do
           throwError $ InternalError $ "Map named " <> name <> " does not have a order record."
         Just order -> do
           -- [KeyValue]
-          applyHashingFunction order persistence tyKey -- [SHA]
+          applyHashingFunction order tyKey -- [SHA]
           load' persistence
           return (Operand tyAnnotVal)
+    Def other _ _ ->
+      throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other
 
 lookupMappingOrder
   :: MonadState CodegenState m
@@ -613,19 +551,6 @@ lookupMappingOrder
   -> m (Maybe Integer)
 lookupMappingOrder name =
   M.lookup name <$> use mappingOrder
-
-createMappingOrder
-  :: (MonadState CodegenState m, MonadError CodegenError m)
-  => Name
-  -> m ()
-createMappingOrder name = do
-  nextOrder <- nextMappingOrder <<+= 1
-  currentMappingOrder <- use mappingOrder
-  case M.lookup name currentMappingOrder of
-    Nothing ->
-      mappingOrder %= M.insert name nextOrder
-    Just _ ->
-      throwError $ InternalError $ "Multiple mapping order insert attempts for mapping named " <> name
 
 codegenPhases :: CodegenM m => AST -> m ()
 codegenPhases functions = do

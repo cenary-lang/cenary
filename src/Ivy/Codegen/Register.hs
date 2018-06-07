@@ -7,8 +7,6 @@ module Ivy.Codegen.Register
   ) where
 
 import Data.Foldable (for_)
-import Ivy.Codegen.Memory
-import Ivy.Syntax
 import Ivy.EvmAPI.API
 import Data.Functor (void)
 import Ivy.Codegen.Types
