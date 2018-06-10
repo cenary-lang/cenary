@@ -9,19 +9,19 @@ function compile {
 EXECUTABLE=./.stack-work/install/x86_64-osx/lts-11.2/8.2.2/bin/cenary
 
 function disasm {
-  $EXECUTABLE -m disasm -i stdlib.ivy
+  $EXECUTABLE -m disasm -i stdlib.cen
 }
 
 function ast {
-  $EXECUTABLE -m ast -i "${1:-stdlib.ivy}"
+  $EXECUTABLE -m ast -i "${1:-stdlib.cen}"
 }
 
 function bytecode {
-  $EXECUTABLE -m bytecode -i "${1:-stdlib.ivy}"
+  $EXECUTABLE -m bytecode -i "${1:-stdlib.cen}"
 }
 
 function run {
-  $EXECUTABLE -m run -i "${1:-stdlib.ivy}"
+  $EXECUTABLE -m run -i "${1:-stdlib.cen}"
 }
 
 function asm {
@@ -29,11 +29,11 @@ function asm {
 }
 
 function deploy {
-  $EXECUTABLE -m deploy -i "${1:-stdlib.ivy}"
+  $EXECUTABLE -m deploy -i "${1:-stdlib.cen}"
 }
 
 function rewind-deploy {
-  $EXECUTABLE -m rewind-deploy -i "${1:-stdlib.ivy}"
+  $EXECUTABLE -m rewind-deploy -i "${1:-stdlib.cen}"
 }
 
 function compute {

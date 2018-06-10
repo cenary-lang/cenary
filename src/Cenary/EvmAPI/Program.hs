@@ -10,3 +10,9 @@ import           Cenary.EvmAPI.Instruction (Instruction (..))
 newtype Program = Program { _unProgram :: (Seq.Seq Instruction) }
 
 makeLenses ''Program
+
+initProgram :: Program
+initProgram = Program Seq.empty
+
+addInstr :: Instruction -> Program -> Program
+addInstr instr p = p & unProgram %~ (instr <|)

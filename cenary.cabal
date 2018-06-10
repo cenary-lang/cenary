@@ -59,24 +59,25 @@ library
     Cenary.EvmAPI.AbiBridge,
     Cenary.Error,
     Cenary.Codegen.Register
+    Cenary.Codegen.Address
+    Cenary.Codegen.CodegenError
+    Cenary.Codegen.CodegenM
+    Cenary.Codegen.CodegenState
+    Cenary.Codegen.Context
+    Cenary.Codegen.ContextM
+    Cenary.Codegen.Env
+    Cenary.Codegen.Evm
+    Cenary.Codegen.FuncRegistry
+    Cenary.Codegen.MappingOrder
+    Cenary.Codegen.Memory
+    Cenary.Codegen.Operand
     Cenary.Codegen.Procedures
+    Cenary.Codegen.Scope
+    Cenary.Codegen.TcM
+    Cenary.Codegen.VariableStatus
     Cenary.EvmAPI.Instruction
     Cenary.EvmAPI.Program
-
-test-suite tests
-    type:             exitcode-stdio-1.0
-    main-is:          Main.hs
-    hs-source-dirs:   tests
-    default-language: Haskell2010
-    ghc-options:      -Wall
-    build-depends:
-      base,
-      directory,
-      filepath,
-      hspec,
-      cenary,
-      mtl,
-      text
+    Cenary.EvmAPI.OpcodeM
 
 executable cenary
     build-depends:

@@ -22,14 +22,16 @@ import           System.Process hiding (env)
 import           Text.Pretty.Simple (pPrint)
 ------------------------------------------------------
 import qualified Cenary.Codegen as C
-import           Cenary.Codegen.Types (CodegenState (..), Env (..),
-                                    FuncRegistry (..), Sig (..), initProgram,
-                                    runEvm)
+import qualified Cenary.Codegen.MappingOrder as MO
+import qualified Cenary.Codegen.Context as Ctx
+import           Cenary.Codegen.Types (Address, CodegenState (..), Env (..),
+                                       FuncRegistry (..), Sig (..), runEvm)
 import           Cenary.Deployment (prepareDeployment, rewindDeployment,
-                                 runDeployment)
+                                    runDeployment)
 import           Cenary.Error
 import qualified Cenary.EvmAPI.AbiBridge as AbiBridge
 import           Cenary.EvmAPI.API (generateByteCode)
+import           Cenary.EvmAPI.Program (initProgram)
 import           Cenary.Options (Mode (..), Options (..), parseOptions)
 import qualified Cenary.Parser as P
 import qualified Cenary.Syntax as S
@@ -65,25 +67,26 @@ execByteCode env byteCode = do
           pure hout
 
 -- Given the address of the deployer, prepares the environment
-initEnv :: Integer -> Env
+initEnv :: Integer -> Env Address
 initEnv _userAddr = Env
   { _sig      = Sig "main" [] S.TInt
-  , _contexts = [M.empty]
+  , _contexts = [Ctx.newEmptyCtx]
   }
 
 initCodegenState :: CodegenState
 initCodegenState =
   CodegenState
     { _heapSpaceBegin   = 0
-    , _stackMemEnd      = 0
+    , _sp               = 0
+    , _framePtrs        = [0]
     , _stackStorageEnd  = 0
     , _env              = initEnv 0 -- TODO: Address of the deployer comes here.
     , _pc               = 0
+    , _maxStackSize     = 0
     , _funcRegistry     = FuncRegistry M.empty
     , _program          = initProgram
     , _funcOffset       = 0
-    , _mappingOrder     = M.empty
-    , _nextMappingOrder = 0
+    , _mappingOrder     = MO.empty
     }
 
 data Environment =

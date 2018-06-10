@@ -6,10 +6,10 @@ module Cenary.Codegen.Register
   , Register (..)
   ) where
 
-import           Data.Foldable (for_)
-import           Data.Functor (void)
 import           Cenary.Codegen.Types
 import           Cenary.EvmAPI.API
+import           Data.Foldable (for_)
+import           Data.Functor (void)
 
 data Register =
     Reg_A

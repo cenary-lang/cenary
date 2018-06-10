@@ -7,13 +7,14 @@
 
 module Cenary.Codegen.Procedures where
 
+import           Cenary.Codegen.CodegenError
+import           Cenary.Codegen.Types
+import           Cenary.EvmAPI.API
+import           Cenary.Syntax
 import           Control.Lens hiding (op)
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Data.Semigroup ((<>))
-import           Cenary.Codegen.Types
-import           Cenary.EvmAPI.API
-import           Cenary.Syntax
 
 -- Input: [A: Operand Value]
 -- Output: [keccak256 of input A]

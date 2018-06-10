@@ -35,6 +35,9 @@ import           Cenary.Crypto.Keccak (keccak256)
 import           Cenary.EvmAPI.AbiBridge
 import           Cenary.EvmAPI.API
 import           Cenary.Syntax
+import           Cenary.Codegen.Context (newEmptyCtx)
+import qualified Cenary.Codegen.MappingOrder as MO
+import           Cenary.Codegen.ContextM
 --------------------------------------------------------------------------------
 
 executeBlock :: CodegenM m => Block -> m ()
@@ -359,6 +362,12 @@ codegenFunDef (FunStmt signature@(FunSig _mods name args) block retTyAnnot) = do
       mstore
       pure (calldataOffset + 0x20, FuncRegistryArgInfo argTy argName : registryInfo) -- TODO: ASSUMPTION: uint32
 
+createStackFrame :: CodegenM m => m ()
+createStackFrame = do
+  sp' <- use sp
+  framePtrs %= (sp':)
+  env %= (contexts %~ (newEmptyCtx:))
+
 codegenFunCall :: CodegenM m => String -> [Expr] -> m Operand
 codegenFunCall name args = do
   lookupFun name >>= \case
@@ -368,6 +377,7 @@ codegenFunCall name args = do
       storeRegVal Reg_FunCall 0x01
       offset <- use funcOffset
       rec push32 (funcDest - offset)
+          -- createStackFrame
           push_func_args name
           push32 (funAddr - offset)
           jump
@@ -550,7 +560,7 @@ lookupMappingOrder
   => Name
   -> m (Maybe Integer)
 lookupMappingOrder name =
-  M.lookup name <$> use mappingOrder
+  MO.lookup name <$> use mappingOrder
 
 codegenPhases :: CodegenM m => AST -> m ()
 codegenPhases functions = do
@@ -579,7 +589,6 @@ codegenGlobalStmt (GlobalFunc funStmt) = codegenFunDef funStmt
 codegenGlobalStmt (GlobalDecl stmt) =
   case stmt of
     SVarDecl ty name -> declVar ty name Global
-
     -- TODO: Make this a user error, not an internal one
     _ -> throwError $ InternalError "Only declarations are allowed at global scope"
 
@@ -597,6 +606,6 @@ bodyPhase stmts = do
       push32 heapSpaceBegin'
       mstore
       traverse_ codegenGlobalStmt stmts
-      heapSpaceBegin' <- use stackMemEnd
+      heapSpaceBegin' <- use sp
   pure ()
 
