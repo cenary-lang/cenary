@@ -1,7 +1,0 @@
-int id(int b) {
-  int[] a;
-  int[] c;
-  a = { 1, 5, 3 };
-  c = { 7, 8, 9, 10, 11 };
-  return c[5];
-};

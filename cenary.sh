@@ -71,29 +71,6 @@ function red {
   echo -e "\e[31m$1\033[0m"
 }
 
-# TODO: Tidy up here when you actually learn bash
-function test {
-  start_testrpc
-  . ./test/assertions
-  for i in $(eval echo "{0.."$(($LEN - 1))"..3}"); do
-    filename="${ASSERTIONS[$i]}"
-    assertion_text="${ASSERTIONS[$i + 1]}"
-    function_call="${ASSERTIONS[$i + 2]}"
-    blue "Testing file $filename"
-    output=$(compute ./test/sources/"$filename" "$function_call" 2>&1)
-    if echo $output | grep -q "$assertion_text"; then
-      green "OK"
-      blue "Output: "
-      green "$output"
-    else
-      red "NOT OK"
-      blue "Output: "
-      red "$output"
-    fi
-  done
-  kill_testrpc
-}
-
 function start_testrpc {
   if ! [[ $(ps aux|grep testrpc|wc -l) -gt 1 ]]; then
     testrpc --gasLimit 90000000 --gasPrice 1 1>/dev/null &

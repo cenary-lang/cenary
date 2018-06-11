@@ -35,7 +35,6 @@ import           Cenary.EvmAPI.Program (initProgram)
 import           Cenary.Options (Mode (..), Options (..), parseOptions)
 import qualified Cenary.Parser as P
 import qualified Cenary.Syntax as S
-import           Cenary.Utils.EvmAsm (asm)
 ------------------------------------------------------
 
 codegen :: Monad m => CodegenState -> S.AST -> ExceptT Error m T.Text
@@ -93,6 +92,40 @@ data Environment =
     Console
   | Testing
 
+type CompilerAction = T.Text -> ExceptT Error IO ()
+
+printAst :: CompilerAction
+printAst = parse
+       >=> liftIO . pPrint
+
+printBytecode :: CompilerAction
+printBytecode = parse
+            >=> codegen initCodegenState
+            >=> liftIO . T.putStrLn
+
+run :: CompilerAction
+run = parse
+  >=> codegen initCodegenState
+  >=> void . execByteCode Console
+
+disasm :: CompilerAction
+disasm code = do
+  parse code >>= codegen initCodegenState >>= liftIO . T.writeFile "yis"
+  (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
+  liftIO $ do
+    T.putStrLn =<< T.hGetContents hout
+    callProcess "rm" ["yis"]
+    hClose hout
+
+deploy :: CompilerAction
+deploy code = do
+  (bytecode, abi) <- prepareDeployment
+                       code
+                       parse
+                       AbiBridge.astToAbi
+                       (codegen initCodegenState)
+  liftIO $ runDeployment (T.unpack bytecode) (TL.unpack abi)
+
 main :: IO ()
 main = do
   Options mode inputFile <- parseOptions
@@ -106,28 +139,14 @@ main = do
     go code mode =
       case mode of
         Ast -> do
-          ast <- parse code
-          liftIO $ pPrint ast
+          printAst code
         ByteCode ->
-          parse code >>= codegen initCodegenState >>= liftIO . T.putStrLn
+          printBytecode code
         Run ->
-          void $ parse code >>= codegen initCodegenState >>= execByteCode Console
-        Asm -> do
-          let byteCode = asm (T.lines code)
-          void $ liftIO (execByteCode Console byteCode)
+          run code
         Disasm -> do
-          parse code >>= codegen initCodegenState >>= liftIO . T.writeFile "yis"
-          (_, Just hout, _, _) <- liftIO $ createProcess (proc "evm" ["disasm", "yis"]){ std_out = CreatePipe  }
-          liftIO $ do
-            T.putStrLn =<< T.hGetContents hout
-            callProcess "rm" ["yis"]
-            hClose hout
+          disasm code
         Deploy -> do
-          (bytecode, abi) <- prepareDeployment
-                               code
-                               parse
-                               AbiBridge.astToAbi
-                               (codegen initCodegenState)
-          liftIO $ runDeployment (T.unpack bytecode) (TL.unpack abi)
+          deploy code
         RewindDeploy -> do
           liftIO rewindDeployment
