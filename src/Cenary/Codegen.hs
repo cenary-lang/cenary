@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -18,6 +20,7 @@ module Cenary.Codegen where
 import           Control.Applicative
 import           Control.Lens hiding (Context, assign, contexts, index, op)
 import           Control.Monad.Except
+import           Control.Category ((>>>))
 import           Control.Monad.State hiding (state)
 import           Data.Char (ord)
 import           Data.Foldable (traverse_)
@@ -58,12 +61,12 @@ assignFromStack tyR name =
       checkTyEq name tyL tyR
       addr <- alloc scope
       push32 addr
-      store' scope
+      store_ scope
       ctxDefineVar name addr
     Def tyL oldAddr scope -> do
       checkTyEq name tyL tyR
       push32 oldAddr
-      store' scope
+      store_ scope
 
 declVar
   :: (MonadState CodegenState m, ContextM m, MonadError CodegenError m, MemoryM m)
@@ -132,7 +135,7 @@ codegenStmt (SMapAssignment name key valExpr) = do
         Just order -> do
           -- [RHSVal, KeyVal]
           applyHashingFunction order tyKey -- [RHSVal, SHA]
-          store' Global
+          store_ Global
     Def other _ _ ->
       throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other
 
@@ -156,19 +159,20 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       -- Size check
       dup3 -- [1, 5, 340, 1]
       dup2 -- [1, 5, 340, 1, 340]
-      load' scope -- [1, 5, 340, 1, 3]
+      load_ scope -- [1, 5, 340, 1, 3]
       branchIf
         offset
-        (push32 0x01 >> swap1 >> sub >> lt)
+        (push32' 0x01 >>> swap1' >>> sub' >>> lt')
         (stop)
       -- [1, 5, 340]
-      inc 0x20 -- [1, 5, 360]
-      dup3 -- [1, 5, 360, 1]
-      push32 0x20 -- [1, 5, 360, 1, 20]
-      mul -- [1, 5, 360, 20]
-      add -- [1, 5, 380]
-      mstore -- [1]
-      pop -- []
+      unsafeGen (
+        inc' 0x20 >>> -- [1, 5, 360]
+        dup3' >>> -- [1, 5, 360, 1]
+        push32' @'IntVal 0x20 >>> -- [1, 5, 360, 1, 20]
+        mul' >>> -- [1, 5, 360, 20]
+        add' >>> -- [1, 5, 380]
+        mstore' >>> -- [1]
+        pop') -- []
     Def ty _ _ -> throwError (IllegalArrAccess name ty)
 
 codegenStmt (SVarDecl ty name) =
@@ -186,7 +190,7 @@ codegenStmt (SIf ePred bodyBlock) = do
   -- Loving this syntax style, should switch to lisp maybe
   branchIf
     (offset)
-    (pure ())
+    (Instr id)
     (void (executeBlock bodyBlock))
   pure ()
 
@@ -231,13 +235,13 @@ log = do
 
 logContents :: Scope -> CodegenM m => m ()
 logContents scope = do
-  dup1 >> load' scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  dup1 >> load_ scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
   log
   pop
 
 logContents' :: Scope -> CodegenM m => m ()
 logContents' scope = do
-  dup1 >> load' scope >> load' scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
+  dup1 >> load_ scope >> load_ scope -- [(ArrLength + 2) * 0x20, HeapAddr, Size]
   log
   pop
 
@@ -430,15 +434,15 @@ codegenExpr (EArrIdentifier name index) = do
       checkTyEq name TInt indexTy
 
       push32 addr
-      load' scope -- [2, 160]
+      load_ scope -- [2, 160]
 
       -- Runtime check for array bounds
       dup2 -- [2, 160, 2]
       dup2 -- [2, 160, 2, 160]
-      load' scope -- [2, 160, 2, 1]
+      load_ scope -- [2, 160, 2, 1]
       branchIf
         offset
-        (push32 0x01 >> swap1 >> sub >> lt)
+        (push32' @'IntVal 0x01 >>> swap1' >>> sub' >>> lt')
         (stop)
 
       -- [2, 160]
@@ -448,7 +452,7 @@ codegenExpr (EArrIdentifier name index) = do
       push32 0x20
       mul
       add
-      load' scope
+      load_ scope
 
       return (Operand ty)
     Def ty _ _ -> throwError (IllegalArrAccess name ty)
@@ -550,7 +554,7 @@ codegenExpr (EMapIdentifier name key) = do
         Just order -> do
           -- [KeyValue]
           applyHashingFunction order tyKey -- [SHA]
-          load' scope
+          load_ scope
           return (Operand tyAnnotVal)
     Def other _ _ ->
       throwError $ InternalError $ "A mapping identifier is saved to lookup table in a non-suitable type: " <> show other

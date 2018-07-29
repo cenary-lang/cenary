@@ -13,13 +13,13 @@ class (Functor m, Applicative m, Monad m) => MemoryM m where
     :: Integer
     -> Scope
     -> m ()
-  load'
+  load_
     :: Scope
     -> m ()
   alloc
     :: Scope
     -> m Integer
-  store'
+  store_
     :: Scope
     -> m ()
   push
@@ -30,13 +30,13 @@ class (Functor m, Applicative m, Monad m) => MemoryM m where
 instance MemoryM Evm where
   load addr scope = do
     push32 addr
-    load' scope
+    load_ scope
 
-  load' = \case
+  load_ = \case
     Global -> sload
     Local -> mload
 
-  store' = \case
+  store_ = \case
     Global -> sstore
     Local -> mstore
 
