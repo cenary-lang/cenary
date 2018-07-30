@@ -73,6 +73,8 @@ module Cenary.EvmAPI.API
   , dup3'
   , inc'
   , stop'
+  , log0'
+  , dup1'
   ) where
 
 import           Data.Monoid ((<>))
@@ -85,7 +87,6 @@ import           Cenary.EvmAPI.Instruction
 import qualified Control.Category as Cat
 
 data ValueTy = IntVal
-             | Address ValueTy
              | Destination
 
 newtype Instr (xs :: [ValueTy]) (ys :: [ValueTy]) = Instr
@@ -152,7 +153,7 @@ pop' = instr POP
 mload' :: Instr xs xs
 mload' = instr MLOAD
 
-mstore' :: Instr xs xs
+mstore' :: Instr (x ': y ': xs) xs
 mstore' = instr MSTORE
 
 mstore8' :: Instr xs xs
@@ -173,7 +174,7 @@ jumpi' = instr JUMPI
 codecopy' :: Instr xs xs
 codecopy' = instr CODECOPY
 
-dup1' :: Instr xs xs
+dup1' :: Instr (x ': xs) (x ': x ': xs)
 dup1' = instr DUP1
 
 exp' :: Instr xs xs
@@ -209,7 +210,7 @@ swap3' = instr SWAP3
 swap4' :: Instr xs xs
 swap4' = instr SWAP4
 
-log0' :: Instr xs xs
+log0' :: Instr (x ': y ': xs) xs
 log0' = instr LOG0
 
 log1' :: Instr xs xs

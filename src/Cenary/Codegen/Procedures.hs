@@ -146,7 +146,12 @@ expandArr offset persistence = do
 jumpdest :: (OpcodeM m, MonadState CodegenState m) => m Integer
 jumpdest = use pc <* op JUMPDEST
 
-mycomp :: OpcodeM m => Instr ('IntVal ': 'IntVal ': xs) ('IntVal ': xs) -> Integer -> Integer -> m ()
+mycomp
+  :: OpcodeM m
+  => Instr ('IntVal ': 'IntVal ': xs) ('IntVal ': xs)
+  -> Integer
+  -> Integer
+  -> m ()
 mycomp loadPred offset branchEnd = unsafeGen $ do
   loadPred
   iszero'
@@ -155,38 +160,16 @@ mycomp loadPred offset branchEnd = unsafeGen $ do
   where
     (>>) = (Cat.>>>)
 
-mycomp'
-  :: OpcodeM m
-  => Instr ('IntVal ': 'IntVal ': xs) ('IntVal ': xs)
-  -> Integer
-  -> Integer
-  -> Instr xs b
-  -> m ()
-mycomp' loadPred offset branchEnd ifComp = unsafeGen $ do
-  loadPred
-  iszero'
-  push32' @'Destination (branchEnd - offset)
-  jumpi'
-  ifComp
-  where
-    (>>) = (Cat.>>>)
-
-branchIf :: (OpcodeM m, MonadState CodegenState m, MonadFix m) => Integer -> Instr ('IntVal ': 'IntVal ': xs) ('IntVal ': xs) -> m () -> m ()
-branchIf offset loadPred ifComp = do
-  rec (mycomp loadPred offset branchEnd)
-      ifComp
-      branchEnd <- jumpdest
-  pure ()
-
-branchIf'
+branchIf
   :: (OpcodeM m, MonadState CodegenState m, MonadFix m)
   => Integer
+  -> Integer
   -> Instr ('IntVal ': 'IntVal ': xs) ('IntVal ': xs)
-  -> Instr xs b
   -> m ()
-branchIf' offset loadPred ifComp = do
-  rec (mycomp' loadPred offset branchEnd ifComp)
-      branchEnd <- jumpdest
+  -> m ()
+branchIf branchEnd offset loadPred ifComp = do
+  mycomp loadPred offset branchEnd
+  ifComp
   pure ()
 
 empty :: Instr a b

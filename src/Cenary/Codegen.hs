@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ConstraintKinds            #-}
@@ -160,10 +161,12 @@ codegenStmt stmt@(SArrAssignment name index val) = do
       dup3 -- [1, 5, 340, 1]
       dup2 -- [1, 5, 340, 1, 340]
       load_ scope -- [1, 5, 340, 1, 3]
-      branchIf
-        offset
-        (push32' 0x01 >>> swap1' >>> sub' >>> lt')
-        (stop)
+      rec branchIf
+            branchEnd
+            offset
+            (push32' 0x01 >>> swap1' >>> sub' >>> lt')
+            (stop)
+          branchEnd <- jumpdest
       -- [1, 5, 340]
       unsafeGen (
         inc' 0x20 >>> -- [1, 5, 360]
@@ -188,10 +191,12 @@ codegenStmt (SIf ePred bodyBlock) = do
   offset <- use funcOffset
 
   -- Loving this syntax style, should switch to lisp maybe
-  branchIf
-    (offset)
-    (Instr id)
-    (void (executeBlock bodyBlock))
+  rec branchIf
+        (branchEnd)
+        (offset)
+        (Instr id)
+        (void (executeBlock bodyBlock))
+      branchEnd <- jumpdest
   pure ()
 
 codegenStmt (SIfThenElse ePred trueBlock falseBlock) = do
@@ -222,16 +227,20 @@ codegenStmt stmt@(SResize name sizeExpr) = do
     Def ty _ _ -> do
       throwError $ CannotResizeNonArray ty
 
+log' :: Integer -> Instr (x ': xs) (x ': xs)
+log' shaAddr =
+  -- [val]
+  dup1' >>> -- [val, val]
+  push32' @'IntVal shaAddr >>> -- [val, val, addr]
+  mstore' >>> -- [val]
+  push32' 0x20 >>> -- [val, 0x20]
+  push32' shaAddr >>> -- [val, 0x20, addr]
+  log0' -- [val]
+
 log :: CodegenM m => m ()
 log = do
-  -- [val]
-  dup1 -- [val, val]
   shaAddr <- alloc Local
-  push32 shaAddr -- [val, val, addr]
-  mstore -- [val]
-  push32 0x20 -- [val, 0x20]
-  push32 shaAddr -- [val, 0x20, addr]
-  log0 -- [val]
+  unsafeGen (log' shaAddr)
 
 logContents :: Scope -> CodegenM m => m ()
 logContents scope = do
@@ -440,10 +449,12 @@ codegenExpr (EArrIdentifier name index) = do
       dup2 -- [2, 160, 2]
       dup2 -- [2, 160, 2, 160]
       load_ scope -- [2, 160, 2, 1]
-      branchIf
-        offset
-        (push32' @'IntVal 0x01 >>> swap1' >>> sub' >>> lt')
-        (stop)
+      rec branchIf
+            branchEnd
+            offset
+            (push32' @'IntVal 0x01 >>> swap1' >>> sub' >>> lt')
+            (stop)
+          branchEnd <- jumpdest
 
       -- [2, 160]
       -- Get value at index
